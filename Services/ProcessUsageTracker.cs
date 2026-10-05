@@ -43,9 +43,25 @@ public sealed class ProcessUsageTracker : IDisposable
         CaptureExistingProcesses();
         StartWatchers();
 
-        // 每 5 秒检查待确认进程并累计各会话时长
+        // 每 5 秒检查待确认进程并累计各会话时长。
+        //
+        // 回调必须包裹 try/catch：System.Threading.Timer 的回调若抛出未处理异常，
+        // 在 .NET 5+ 上会导致【整个进程终止】（实测 AppDomain.UnhandledException
+        // 的 IsTerminating = True，App 层的全局处理器无法阻止）。
+        // 对本程序（开机自启、静默后台、长期记录）来说，进程静默崩溃意味着
+        // 记录毫无征兆地停止、托盘图标消失，用户完全无感知。
         _titleRefreshTimer = new Timer(
-            _ => RefreshAndAccumulate(),
+            _ =>
+            {
+                try
+                {
+                    RefreshAndAccumulate();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "定时刷新进程使用状态失败（已忽略，不影响后续周期）");
+                }
+            },
             null,
             TimeSpan.Zero,
             TimeSpan.FromSeconds(5)
