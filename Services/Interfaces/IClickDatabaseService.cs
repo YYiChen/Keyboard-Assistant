@@ -26,4 +26,10 @@ public interface IClickDatabaseService
     Dictionary<string, int> GetClickCounts();
 
     Dictionary<string, int> GetClickCountsByDate(DateTime date);
+
+    /// <summary>
+    /// 指定区间（[from, to)）内各鼠标按键的点击次数。
+    /// 用于"近 7 天 / 近 30 天"这类时间范围统计。
+    /// </summary>
+    Dictionary<string, int> GetClickCountsInRange(DateTime from, DateTime to);
 }

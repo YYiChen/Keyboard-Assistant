@@ -8,11 +8,16 @@
   Topmost="True"
   ShowInTaskbar="False"
   WindowStartupLocation="Manual"
-  Background="#FFFFFF">
+  Background="{StaticResource Brush.Surface}"
+  FontFamily="{StaticResource Font.Family}">
   <Window.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
   </Window.Resources>
-  <Border BorderBrush="#CCCCCC" BorderThickness="1">
+
+  <!--  颜色统一改用设计令牌，不再硬编码  -->
+  <Border
+    BorderBrush="{StaticResource Brush.Border.Strong}"
+    BorderThickness="1">
     <Grid Margin="14,10,14,10">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
@@ -23,38 +28,40 @@
       </Grid.RowDefinitions>
 
       <!--  标题栏：窗口名 + 关闭按钮  -->
-      <Grid Grid.Row="0" Height="22" Margin="0,0,0,8">
+      <Grid
+        Grid.Row="0"
+        Height="22"
+        Margin="0,0,0,8">
         <TextBlock
-          Text="灵感速记"
-          FontSize="13"
-          FontWeight="Bold"
           VerticalAlignment="Center"
-          Foreground="#333333" />
+          Foreground="{StaticResource Brush.Text.Primary}"
+          Style="{StaticResource Text.BodyStrong}"
+          Text="灵感速记" />
         <Button
           x:Name="CloseButton"
-          HorizontalAlignment="Right"
-          VerticalAlignment="Top"
           Width="20"
           Height="20"
           Padding="0"
-          Content="✕"
-          FontSize="12"
-          Foreground="#666666"
-          BorderThickness="0"
+          HorizontalAlignment="Right"
+          VerticalAlignment="Top"
           Background="Transparent"
-          ToolTip="关闭（不保存）"
+          BorderThickness="0"
+          Click="CloseButton_Click"
+          Content="✕"
           Cursor="Hand"
-          Click="CloseButton_Click" />
+          FontSize="12"
+          Foreground="{StaticResource Brush.Text.Secondary}"
+          ToolTip="关闭（不保存）" />
       </Grid>
 
       <!--  来源行：唤起瞬间的前台窗口标题，超长省略，悬停可看全文；无来源时隐藏  -->
       <TextBlock
         Grid.Row="1"
         Margin="0,0,0,8"
+        Foreground="{StaticResource Brush.Text.Tertiary}"
+        Style="{StaticResource Text.Caption}"
         Text="{Binding Source}"
         TextTrimming="CharacterEllipsis"
-        Foreground="#888888"
-        FontSize="12"
         ToolTip="{Binding Source}"
         Visibility="{Binding HasSource, Converter={StaticResource BoolToVisibility}}" />
 
@@ -62,22 +69,22 @@
       <TextBox
         x:Name="ContentBox"
         Grid.Row="2"
-        Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
+        Padding="4"
         AcceptsReturn="True"
         AcceptsTab="True"
-        TextWrapping="Wrap"
-        VerticalScrollBarVisibility="Auto"
+        BorderBrush="{StaticResource Brush.Border.Strong}"
         FontSize="14"
-        Padding="4"
-        BorderBrush="#D0D0D0" />
+        Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}"
+        TextWrapping="Wrap"
+        VerticalScrollBarVisibility="Auto" />
 
       <!--  保存失败提示：内容保留，可重试  -->
       <TextBlock
         Grid.Row="3"
         Margin="0,8,0,0"
+        Foreground="{StaticResource Brush.Error}"
+        Style="{StaticResource Text.Caption}"
         Text="{Binding ErrorMessage}"
-        Foreground="#C62828"
-        FontSize="12"
         TextWrapping="Wrap"
         Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}" />
 
@@ -85,10 +92,10 @@
       <TextBlock
         Grid.Row="4"
         Margin="0,8,0,0"
-        Text="Ctrl+Enter 保存　·　Esc / ✕ 取消"
-        Foreground="#999999"
-        FontSize="11"
-        HorizontalAlignment="Right" />
+        HorizontalAlignment="Right"
+        Foreground="{StaticResource Brush.Text.Tertiary}"
+        Style="{StaticResource Text.Caption}"
+        Text="Ctrl+Enter 保存　·　Esc / ✕ 取消" />
     </Grid>
   </Border>
 </Window>

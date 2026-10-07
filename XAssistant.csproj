@@ -11,11 +11,18 @@
     <!--
       产品信息。原先完全没有版本号，「设置 → 关于」无处显示，
       出问题时也无法确认用户跑的是哪一版。
+
+      v1.2.0：软件更名 XAssistant → Keyboard Assistant。
+      注意 RootNamespace 仍保持 XAssistant —— 命名空间重命名会牵动全部源文件，
+      收益仅是"好看"，风险却不小（改漏一处就编译失败）。
+      真正对用户可见的是 Product / 窗口标题 / exe 名，这三处已改。
     -->
-    <Version>1.1.0</Version>
-    <Product>XAssistant</Product>
+    <Version>1.2.0</Version>
+    <AssemblyName>KeyboardAssistant</AssemblyName>
+    <Product>Keyboard Assistant</Product>
+    <AssemblyTitle>Keyboard Assistant</AssemblyTitle>
     <Company>YYiChen</Company>
-    <Description>本机输入与使用情况记录工具（个人自用）</Description>
+    <Description>本机输入与使用情况记录工具（键盘 / 鼠标 / 使用时长统计）</Description>
 
     <!--
       DPI 感知与应用清单（计划 A7）。
@@ -38,6 +45,19 @@
 
   <ItemGroup>
     <Folder Include="Models\" />
+  </ItemGroup>
+
+  <!--
+    图标需要同时以两种方式引入：
+      · <ApplicationIcon>（见上方 PropertyGroup）—— 写进 exe 的 PE 资源，
+        决定文件在资源管理器里显示的图标。
+      · <Resource>（此处）—— 打包进 WPF 程序集，供 Window.Icon 通过
+        pack URI 引用。
+    只配置前者时，窗口在任务栏上会显示系统默认占位图标 ——
+    这正是「任务栏没有图标」的原因。
+  -->
+  <ItemGroup>
+    <Resource Include="Assets\app-icon.ico" />
   </ItemGroup>
 
   <ItemGroup>

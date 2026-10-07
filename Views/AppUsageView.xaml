@@ -1,54 +1,256 @@
 <UserControl
-    x:Class="XAssistant.Views.AppUsageView"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    d:DesignHeight="450"
-    d:DesignWidth="800"
-    mc:Ignorable="d">
-    <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+  x:Class="XAssistant.Views.AppUsageView"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:vm="clr-namespace:XAssistant.ViewModels"
+  d:DataContext="{d:DesignInstance Type=vm:AppUsageViewModel}"
+  d:DesignHeight="700"
+  d:DesignWidth="1000"
+  mc:Ignorable="d">
 
-        <!--  日期选择器（可选，你可以先隐藏，未来扩展）  -->
-        <StackPanel
-            Grid.Row="0"
-            Margin="0,0,0,10"
-            Orientation="Horizontal">
-            <TextBlock
-                Margin="0,0,5,0"
-                VerticalAlignment="Center"
-                Text="日期：" />
-            <DatePicker SelectedDate="{Binding SelectedDate}" />
+  <UserControl.Resources>
+    <Style x:Key="AppIconBox" TargetType="Border">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="CornerRadius" Value="{StaticResource Radius.Medium}" />
+      <Setter Property="Background" Value="{StaticResource Brush.Chart.Track}" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+  </UserControl.Resources>
+
+  <ScrollViewer
+    HorizontalScrollBarVisibility="Disabled"
+    VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="24">
+
+      <!--  ══════════ 标题 + 日期 ══════════  -->
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <StackPanel Grid.Column="0">
+          <TextBlock Style="{StaticResource Text.Title}" Text="软件使用" />
+          <TextBlock
+            Margin="0,4,0,0"
+            Style="{StaticResource Text.Secondary}"
+            Text="打开了哪些应用，各自占了多长时间。" />
         </StackPanel>
+        <!--
+          日期切换：三键式（前一天 / 后一天 / 回到今天）。
+          替代原先的 WPF 原生 DatePicker —— 后者外观与整体风格冲突，
+          且需连 Calendar 弹出层一并重做才能统一；而"看前一天"是这里的绝对高频操作，
+          直接点箭头比"展开日历再点日期"更快。
+        -->
+        <StackPanel
+          Grid.Column="1"
+          VerticalAlignment="Center"
+          Orientation="Horizontal">
+          <Button
+            Padding="8,6"
+            Command="{Binding PreviousDayCommand}"
+            Style="{StaticResource Button.Secondary}"
+            ToolTip="前一天">
+            <TextBlock
+              FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+              FontSize="12"
+              Text="&#xE76B;" />
+          </Button>
 
-        <GroupBox Grid.Row="1" Header="软件使用时长（按应用）">
-            <DataGrid
-                AutoGenerateColumns="False"
-                IsReadOnly="True"
-                ItemsSource="{Binding AppUsageList}">
-                <DataGrid.Columns>
-                    <DataGridTextColumn
-                        Width="200"
-                        Binding="{Binding DisplayName}"
-                        Header="应用" />
-                    <DataGridTextColumn
-                        Width="100"
-                        Binding="{Binding FormattedStartTime}"
-                        Header="启动时间" />
-                    <DataGridTextColumn
-                        Width="100"
-                        Binding="{Binding FormattedEndTime}"
-                        Header="结束时间" />
-                    <DataGridTextColumn
-                        Width="150"
-                        Binding="{Binding FormattedUsage}"
-                        Header="使用时长" />
-                </DataGrid.Columns>
-            </DataGrid>
-        </GroupBox>
-    </Grid>
+          <TextBlock
+            MinWidth="104"
+            Margin="10,0"
+            VerticalAlignment="Center"
+            Style="{StaticResource Text.BodyStrong}"
+            Text="{Binding DateDisplayText}"
+            TextAlignment="Center" />
+
+          <Button
+            Padding="8,6"
+            Command="{Binding NextDayCommand}"
+            IsEnabled="{Binding CanGoNext}"
+            Style="{StaticResource Button.Secondary}"
+            ToolTip="后一天">
+            <TextBlock
+              FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+              FontSize="12"
+              Text="&#xE76C;" />
+          </Button>
+
+          <Button
+            Margin="10,0,0,0"
+            Command="{Binding GoToTodayCommand}"
+            Content="今天"
+            IsEnabled="{Binding CanGoNext}"
+            Style="{StaticResource Button.Ghost}" />
+        </StackPanel>
+      </Grid>
+
+      <!--  ══════════ 指标卡 ══════════  -->
+      <!--
+        用 UniformGrid 而非 Grid + 星号列：星号列在内容较长时会被撑开导致不等分
+        （实测三卡布局中第一张卡明显宽于第二张并溢出容器），
+        UniformGrid 强制等分，间距改用各项的 Margin 控制。
+      -->
+      <UniformGrid Margin="0,18,0,0" Columns="3">
+        <Border
+          Margin="0,0,6,0"
+          Style="{StaticResource Card.Tint.Blue}">
+          <StackPanel>
+            <TextBlock Style="{StaticResource MetricCard.Label}" Text="应用使用总时长" />
+            <TextBlock
+              Foreground="{StaticResource Brush.Blue.Text}"
+              Style="{StaticResource MetricCard.Value}"
+              Text="{Binding TotalUsageText}"
+              TextTrimming="CharacterEllipsis" />
+            <TextBlock Style="{StaticResource MetricCard.Sub}" Text="各应用累计" />
+          </StackPanel>
+        </Border>
+
+        <Border
+          Margin="6,0"
+          Style="{StaticResource Card.Tint.Violet}">
+          <StackPanel>
+            <TextBlock Style="{StaticResource MetricCard.Label}" Text="用过的应用" />
+            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+              <TextBlock
+                Margin="0"
+                Foreground="{StaticResource Brush.Violet.Text}"
+                Style="{StaticResource MetricCard.Value}"
+                Text="{Binding AppCount}" />
+              <TextBlock
+                Margin="4,0,0,4"
+                VerticalAlignment="Bottom"
+                Opacity="0.7"
+                Style="{StaticResource Text.Caption}"
+                Text="个" />
+            </StackPanel>
+            <TextBlock Style="{StaticResource MetricCard.Sub}" Text="当天有记录的应用数" />
+          </StackPanel>
+        </Border>
+
+        <Border
+          Margin="6,0,0,0"
+          Style="{StaticResource Card.Tint.Green}">
+          <StackPanel>
+            <TextBlock Style="{StaticResource MetricCard.Label}" Text="用时最多" />
+            <TextBlock
+              Margin="0,8,0,0"
+              Foreground="{StaticResource Brush.Green.Text}"
+              Style="{StaticResource Text.MetricSmall}"
+              Text="{Binding TopAppText}" />
+            <TextBlock Style="{StaticResource MetricCard.Sub}" Text="今日主力应用" />
+          </StackPanel>
+        </Border>
+      </UniformGrid>
+
+      <!--  ══════════ 应用排行 ══════════  -->
+      <Border Margin="0,16,0,24" Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Style="{StaticResource Text.SectionHeader}" Text="应用用时排行" />
+          <TextBlock
+            Margin="0,2,0,0"
+            Style="{StaticResource Text.Caption}"
+            Text="按使用时长从多到少；条形长度表示相对用时最多的应用。" />
+
+          <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding AppUsageList}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="0,0,0,14">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="210" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+
+                  <!--
+                    图标区：底层放首字母（图标取不到时可见），
+                    上层盖 Image —— Image 的 Source 为 null 时不绘制任何内容，
+                    因此无需触发器切换，效果等同"有图标显示图标、没有则显示首字母"。
+                  -->
+                  <Border
+                    Grid.Column="0"
+                    Margin="0,0,12,0"
+                    Style="{StaticResource AppIconBox}">
+                    <Grid>
+                      <TextBlock
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Brush.Text.Tertiary}"
+                        Text="{Binding Initial}" />
+                      <Image
+                        Width="22"
+                        Height="22"
+                        RenderOptions.BitmapScalingMode="HighQuality"
+                        Source="{Binding Icon}" />
+                    </Grid>
+                  </Border>
+
+                  <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Center">
+                    <TextBlock
+                      Style="{StaticResource Text.BodyStrong}"
+                      Text="{Binding DisplayName}"
+                      TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                      Style="{StaticResource Text.Caption}"
+                      Text="{Binding ProcessName}"
+                      TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+
+                  <ProgressBar
+                    Grid.Column="2"
+                    Margin="0,0,14,0"
+                    VerticalAlignment="Center"
+                    Maximum="100"
+                    Style="{StaticResource Viz.Bar}"
+                    Value="{Binding Percent}" />
+
+                  <TextBlock
+                    Grid.Column="3"
+                    Width="96"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource Text.BodyStrong}"
+                    Text="{Binding FormattedUsage}"
+                    TextAlignment="Right" />
+
+                  <TextBlock
+                    Grid.Column="4"
+                    Width="52"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource Text.Caption}"
+                    Text="{Binding PercentText}"
+                    TextAlignment="Right" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!--  空状态  -->
+          <TextBlock
+            Margin="0,16,0,4"
+            HorizontalAlignment="Center"
+            Text="这一天还没有应用使用记录。">
+            <TextBlock.Style>
+              <Style BasedOn="{StaticResource Text.Caption}" TargetType="TextBlock">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding AppCount}" Value="0">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
 </UserControl>

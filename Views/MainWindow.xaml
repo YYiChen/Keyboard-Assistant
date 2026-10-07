@@ -5,7 +5,7 @@
   xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
   xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
   xmlns:vm="clr-namespace:XAssistant.ViewModels"
-  Title="XAssistant"
+  Title="Keyboard Assistant"
   Width="{Binding WindowWidth, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
   Height="{Binding WindowHeight, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
   MinWidth="800"
@@ -35,11 +35,11 @@
           Margin="20,20,20,16">
           <TextBlock
             Style="{StaticResource Text.SectionHeader}"
-            Text="XAssistant" />
+            Text="Keyboard Assistant" />
           <TextBlock
             Margin="0,2,0,0"
             Style="{StaticResource Text.Caption}"
-            Text="本机使用情况记录" />
+            Text="本机输入统计" />
         </StackPanel>
 
         <!--  底部：版本号  -->

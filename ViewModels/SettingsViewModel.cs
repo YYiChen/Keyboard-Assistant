@@ -253,6 +253,84 @@ public partial class SettingsViewModel : ViewModelBase
 
     public string RepositoryUrl => AppInfo.RepositoryUrl;
 
+    // ══════════════ 检查更新 ══════════════
+
+    private readonly UpdateService _updates = new();
+
+    /// <summary>是否正在检查（用于禁用按钮、显示进行中状态）。</summary>
+    [ObservableProperty]
+    private bool _isCheckingUpdate;
+
+    /// <summary>检查结果文案。</summary>
+    [ObservableProperty]
+    private string _updateStatusText = string.Empty;
+
+    /// <summary>发现新版本时，Release 页地址（供"前往下载"按钮使用）。</summary>
+    [ObservableProperty]
+    private string? _updateUrl;
+
+    /// <summary>是否有可打开的下载地址。</summary>
+    public bool CanOpenUpdate => !string.IsNullOrEmpty(UpdateUrl);
+
+    [RelayCommand]
+    private async Task CheckUpdateAsync()
+    {
+        if (IsCheckingUpdate)
+            return;
+
+        IsCheckingUpdate = true;
+        UpdateStatusText = "正在检查…";
+        UpdateUrl = null;
+        OnPropertyChanged(nameof(CanOpenUpdate));
+
+        try
+        {
+            var result = await _updates.CheckAsync();
+
+            if (!result.Success)
+            {
+                UpdateStatusText = result.ErrorMessage ?? "检查失败。";
+                return;
+            }
+
+            if (result.HasUpdate)
+            {
+                UpdateStatusText = $"发现新版本 v{result.LatestVersion}（当前 v{result.CurrentVersion}）。";
+                UpdateUrl = result.ReleaseUrl;
+            }
+            else
+            {
+                UpdateStatusText = $"已是最新版本（v{result.CurrentVersion}）。";
+            }
+        }
+        finally
+        {
+            IsCheckingUpdate = false;
+            OnPropertyChanged(nameof(CanOpenUpdate));
+        }
+    }
+
+    [RelayCommand]
+    private void OpenUpdateUrl()
+    {
+        if (string.IsNullOrWhiteSpace(UpdateUrl))
+            return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = UpdateUrl,
+                    UseShellExecute = true,
+                }
+            );
+        }
+        catch
+        { /* 打不开浏览器不是关键路径 */
+        }
+    }
+
     [RelayCommand]
     private static void OpenRepository()
     {

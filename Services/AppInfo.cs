@@ -18,7 +18,10 @@ public static class AppInfo
     /// <summary>主程序文件的最后写入时间，作为构建日期的近似值。</summary>
     public static string BuildDateText { get; } = ResolveBuildDate();
 
-    public const string RepositoryUrl = "https://github.com/YYiChen/XAssistant";
+    public const string RepositoryUrl = "https://github.com/YYiChen/Keyboard-Assistant";
+
+    /// <summary>GitHub 的 owner/repo 形式，供更新检测调用 Releases API。</summary>
+    public const string RepositorySlug = "YYiChen/Keyboard-Assistant";
 
     private static string ResolveVersion()
     {

@@ -121,11 +121,12 @@
         Style="{StaticResource Text.Body}"
         Text="筛选级别" />
       <ComboBox
-        Width="130"
+        Width="140"
         Margin="8,0,16,0"
         VerticalAlignment="Center"
         ItemsSource="{Binding LogLevelOptions}"
-        SelectedItem="{Binding LogLevelFilter}" />
+        SelectedItem="{Binding LogLevelFilter}"
+        Style="{StaticResource ComboBox.Modern}" />
       <Button
         Margin="0,0,8,0"
         Command="{Binding RefreshLogsCommand}"

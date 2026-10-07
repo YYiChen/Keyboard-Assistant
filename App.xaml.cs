@@ -126,12 +126,17 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IMouseClickBuffer, MouseClickBuffer>();
         services.AddSingleton<IKeyPressBuffer, KeyPressBuffer>();
 #if DEBUG
-        services.AddSingleton<IStartupService>(_ => new StartupService("XAssistant_Dev"));
+        services.AddSingleton<IStartupService>(_ => new StartupService("Keyboard Assistant (Dev)"));
 #else
-        services.AddSingleton<IStartupService>(_ => new StartupService("XAssistant"));
+        services.AddSingleton<IStartupService>(_ => new StartupService("Keyboard Assistant"));
 #endif
         services.AddSingleton<IKeyboardHookService, KeyboardHookService>();
         services.AddSingleton<IKeyDatabaseService, KeyDatabaseService>();
+
+        // 由键鼠输入活动推导「电脑使用时长」，供 UsageTracker 服务不可用时回退
+        services.AddSingleton<ActivityDataService>();
+        // 进程名 → 用户认得出的名称与图标（软件使用页展示用）
+        services.AddSingleton<AppInfoResolver>();
         services.AddSingleton<ClickCounterViewModel>();
         services.AddSingleton<KeyCounterViewModel>();
         services.AddSingleton<MainWindowViewModel>();

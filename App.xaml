@@ -17,6 +17,21 @@
         <ResourceDictionary Source="Themes/Controls.xaml" />
       </ResourceDictionary.MergedDictionaries>
 
+      <!--
+        窗口图标（应用级设置，故放在此处而非控件样式文件）。
+
+        原先三个窗口都没有设置 Window.Icon。csproj 里虽然配了
+        <ApplicationIcon> 写进 exe 的 PE 资源，但那只影响文件在资源管理器里的
+        显示 —— WPF 窗口要引用图标必须把 ico 以 <Resource> 打包进程序集，
+        再用 pack URI 指定。两者缺一，任务栏就显示系统默认占位图标。
+
+        用隐式样式而非逐个窗口设置：MainWindow / QuickNoteWindow / ToastWindow
+        都自动获得，后续新增窗口也不会遗漏。
+      -->
+      <Style TargetType="Window">
+        <Setter Property="Icon" Value="pack://application:,,,/Assets/app-icon.ico" />
+      </Style>
+
       <DataTemplate DataType="{x:Type vm:HomeViewModel}">
         <views:HomeView />
       </DataTemplate>

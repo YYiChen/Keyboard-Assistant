@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using XAssistant.Models;
+using XAssistant.Services;
 
 namespace XAssistant.ViewModels;
 
@@ -15,9 +16,108 @@ public partial class UsageViewModel : ViewModelBase
     private const string PipeName = "UsageTrackerPipe";
     private readonly DispatcherTimer _refreshTimer;
     private readonly ILogger<UsageViewModel> _logger;
+    private readonly ActivityDataService _activityData;
 
     [ObservableProperty]
-    private string _todayUsageText = "00:00:00";
+    private string _todayUsageText = "—";
+
+    /// <summary>
+    /// 当前时长是否为「由输入活动估算」而来（而非来自 UsageTracker 服务）。
+    /// 界面据此显示数据来源说明 —— 估算值必须如实标注，不能让用户以为是精确统计。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isEstimated;
+
+    /// <summary>数据来源说明文本。</summary>
+    [ObservableProperty]
+    private string _dataSourceNote = string.Empty;
+
+    // ══════════════ 使用节奏统计 ══════════════
+    // 用户反馈这一页"只有时长和表格，太单薄"，故补充以下维度。
+    // 全部由键鼠活动推算，不依赖任何外部服务。
+
+    /// <summary>今日活跃段数（相邻输入间隔超过 5 分钟即算一段）。</summary>
+    [ObservableProperty]
+    private int _todaySegmentCount;
+
+    /// <summary>最长的一段连续使用。</summary>
+    [ObservableProperty]
+    private string _longestSegmentText = "—";
+
+    /// <summary>平均每段时长。</summary>
+    [ObservableProperty]
+    private string _averageSegmentText = "—";
+
+    /// <summary>近 7 日合计时长。</summary>
+    [ObservableProperty]
+    private string _weeklyTotalText = "—";
+
+    /// <summary>今日 24 小时活跃分布。</summary>
+    public ObservableCollection<HourBar> HourlyBars { get; } = new();
+
+    /// <summary>近 7 日活动时长趋势。</summary>
+    public ObservableCollection<DayBar> WeeklyDurations { get; } = new();
+
+    // ══════════════ 时间范围 ══════════════
+
+    [ObservableProperty]
+    private StatsRange _selectedRange = StatsRange.Today;
+
+    partial void OnSelectedRangeChanged(StatsRange value)
+    {
+        OnPropertyChanged(nameof(IsRangeToday));
+        OnPropertyChanged(nameof(IsRangeYesterday));
+        OnPropertyChanged(nameof(IsRangeLast7Days));
+        OnPropertyChanged(nameof(IsRangeLast30Days));
+        OnPropertyChanged(nameof(RangeLabel));
+        _ = RefreshActivityStatisticsAsync();
+    }
+
+    public bool IsRangeToday
+    {
+        get => SelectedRange == StatsRange.Today;
+        set
+        {
+            if (value)
+                SelectedRange = StatsRange.Today;
+        }
+    }
+
+    public bool IsRangeYesterday
+    {
+        get => SelectedRange == StatsRange.Yesterday;
+        set
+        {
+            if (value)
+                SelectedRange = StatsRange.Yesterday;
+        }
+    }
+
+    public bool IsRangeLast7Days
+    {
+        get => SelectedRange == StatsRange.Last7Days;
+        set
+        {
+            if (value)
+                SelectedRange = StatsRange.Last7Days;
+        }
+    }
+
+    public bool IsRangeLast30Days
+    {
+        get => SelectedRange == StatsRange.Last30Days;
+        set
+        {
+            if (value)
+                SelectedRange = StatsRange.Last30Days;
+        }
+    }
+
+    public string RangeLabel => SelectedRange.Label();
+
+    /// <summary>范围内有活动记录的天数。</summary>
+    [ObservableProperty]
+    private int _rangeActiveDays;
 
     [ObservableProperty]
     private ObservableCollection<DailyUsage> _history = new();
@@ -44,9 +144,10 @@ public partial class UsageViewModel : ViewModelBase
 
     private static readonly TimeSpan RetryWhenUnavailable = TimeSpan.FromMinutes(5);
 
-    public UsageViewModel(ILogger<UsageViewModel> logger)
+    public UsageViewModel(ILogger<UsageViewModel> logger, ActivityDataService activityData)
     {
         _logger = logger;
+        _activityData = activityData;
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _refreshTimer.Tick += async (_, _) =>
         {
@@ -113,6 +214,8 @@ public partial class UsageViewModel : ViewModelBase
             // 去掉秒位（秒级跳动对"今天用了多久"没有信息量，还让数字频繁变化），
             // 并避免 30:15:00 这种读不出量级的写法。
             TodayUsageText = FormatUsageText(eventSeconds);
+            IsEstimated = false;
+            DataSourceNote = "来自电脑使用追踪服务的记录。";
 
             // 走到这里说明管道连通、服务在跑 —— 在此处检测「恢复」才准确。
             // （不能放在定时器外层：本方法内部已吞掉异常，外层 try 永远捕获不到，
@@ -148,27 +251,163 @@ public partial class UsageViewModel : ViewModelBase
             //
             // 时长的权威来源就是 UsageTracker 服务。服务不在时如实说明「未启用」，
             // 比给一个看似精确、实则无意义的 0 更诚实。
+            IsEstimated = false;
+
+            // 第一级：读 pc_usage.db。服务曾运行过、后来停掉时，历史数据仍然有效。
             try
             {
                 long dbSeconds = LoadTodaySecondsFromDb();
-
-                // 库里确实有历史数据时才显示数值（例如服务曾运行过、后来停了）
-                TodayUsageText = dbSeconds > 0
-                    ? FormatUsageText(dbSeconds)
-                    : "未启用";
-                return dbSeconds;
+                if (dbSeconds > 0)
+                {
+                    TodayUsageText = FormatUsageText(dbSeconds);
+                    DataSourceNote = "来自电脑使用追踪服务的记录。";
+                    return dbSeconds;
+                }
             }
             catch (Exception dbEx)
             {
-                if (!_usageTrackerUnavailable)
-                {
-                    _logger.LogError(dbEx, "数据库读取今日秒数也失败");
-                }
-                TodayUsageText = "未启用";
-                return 0;
+                _logger.LogDebug(dbEx, "读取 pc_usage.db 失败，改用输入活动估算");
             }
+
+            // 第二级：用键鼠输入活动估算。
+            // 主程序本来就在记录每次按键与点击，据此可推算出"实际在操作电脑"的时长 ——
+            // 零额外依赖，不需要管理员安装任何服务。
+            var active = _activityData.GetActiveDuration(DateTime.Today);
+            long estimatedSeconds = (long)active.TotalSeconds;
+
+            TodayUsageText = estimatedSeconds > 0 ? ActivityCalculator.Format(active) : "—";
+            IsEstimated = true;
+            DataSourceNote = estimatedSeconds > 0
+                ? "由键盘/鼠标输入活动估算（相邻输入间隔超过 5 分钟即视为离开）。"
+                : "今天还没有输入活动记录。";
+
+            await RefreshActivityStatisticsAsync();
+            return estimatedSeconds;
         }
     }
+
+    /// <summary>
+    /// 计算使用节奏相关的统计（段数、最长连续、时段分布、近 7 日趋势）。
+    ///
+    /// 查询放在后台线程：近 7 日趋势需要按天各查两个库（共 14 次），
+    /// 放在 UI 线程会让界面出现可感知的停顿。集合赋值仍回到 UI 线程进行。
+    /// </summary>
+    private async Task RefreshActivityStatisticsAsync()
+    {
+        var (rangeFrom, rangeTo) = SelectedRange.ToDateRange();
+
+        var data = await Task.Run(() =>
+        {
+            var minutes = _activityData.GetActiveMinutes(rangeFrom, rangeTo);
+            var segments = ActivityCalculator.SplitSegments(minutes);
+            var daily = _activityData.GetDailyDurations(7);
+            return (minutes, segments, daily);
+        });
+
+        var (minutes, segments, daily) = data;
+
+        // ── 范围活跃天数 ──
+        RangeActiveDays = minutes.Select(m => m.Date).Distinct().Count();
+
+        // ── 范围总时长（跟随范围刷新主指标） ──
+        var total = segments.Aggregate(TimeSpan.Zero, (acc, s) => acc + s.Duration);
+        TodayUsageText = total > TimeSpan.Zero ? ActivityCalculator.Format(total) : "—";
+
+        // ── 段数 / 最长连续 / 平均段长 ──
+        TodaySegmentCount = segments.Count;
+
+        LongestSegmentText =
+            segments.Count > 0
+                ? ActivityCalculator.Format(segments.Max(s => s.Duration))
+                : "—";
+
+        AverageSegmentText =
+            segments.Count > 0
+                ? ActivityCalculator.Format(TimeSpan.FromTicks(total.Ticks / segments.Count))
+                : "—";
+
+        // ── 24 小时分布 ──
+        var hourly = new int[24];
+        foreach (var m in minutes)
+        {
+            if (m.Hour is >= 0 and < 24)
+                hourly[m.Hour]++;
+        }
+
+        int peak = hourly.Max();
+        int currentHour = DateTime.Now.Hour;
+
+        HourlyBars.Clear();
+        for (int h = 0; h < 24; h++)
+        {
+            HourlyBars.Add(
+                new HourBar
+                {
+                    Hour = h,
+                    Count = hourly[h],
+                    Height =
+                        peak > 0 && hourly[h] > 0
+                            ? Math.Max(3, hourly[h] * HourBar.MaxHeight / peak)
+                            : 0,
+                    Label = h % 3 == 0 ? h.ToString("D2") : string.Empty,
+                    IsCurrent = h == currentHour,
+                }
+            );
+        }
+
+        // ── 近 7 日趋势 ──
+        var maxDuration = daily.Count > 0 ? daily.Max(d => d.Duration) : TimeSpan.Zero;
+
+        WeeklyDurations.Clear();
+        for (int i = 0; i < daily.Count; i++)
+        {
+            var (date, duration) = daily[i];
+            var previous = i > 0 ? daily[i - 1].Duration : TimeSpan.Zero;
+
+            string mark =
+                i == 0 || previous == TimeSpan.Zero || duration == previous
+                    ? string.Empty
+                    : duration > previous
+                        ? "↑"
+                        : "↓";
+
+            WeeklyDurations.Add(
+                new DayBar
+                {
+                    Label = WeekdayName(date.DayOfWeek),
+                    DateText = date.ToString("MM-dd"),
+                    Duration = duration,
+                    DurationText =
+                        duration > TimeSpan.Zero ? ActivityCalculator.Format(duration) : "—",
+                    Height =
+                        maxDuration > TimeSpan.Zero && duration > TimeSpan.Zero
+                            ? Math.Max(
+                                3,
+                                duration.TotalSeconds * DayBar.MaxHeight / maxDuration.TotalSeconds
+                            )
+                            : 0,
+                    IsToday = date.Date == DateTime.Today,
+                    TrendMark = mark,
+                }
+            );
+        }
+
+        WeeklyTotalText = ActivityCalculator.Format(
+            daily.Aggregate(TimeSpan.Zero, (acc, d) => acc + d.Duration)
+        );
+    }
+
+    private static string WeekdayName(DayOfWeek day) =>
+        day switch
+        {
+            DayOfWeek.Monday => "周一",
+            DayOfWeek.Tuesday => "周二",
+            DayOfWeek.Wednesday => "周三",
+            DayOfWeek.Thursday => "周四",
+            DayOfWeek.Friday => "周五",
+            DayOfWeek.Saturday => "周六",
+            _ => "周日",
+        };
 
     /// <summary>
     /// 把秒数格式化为时长文本。超过一天时带"天"，避免出现 30:15:00 这种读不出量级的写法。

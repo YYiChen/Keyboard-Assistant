@@ -105,6 +105,14 @@ namespace XAssistant.Services
 
         private static string FolderName()
         {
+            // ⚠ 数据目录名**刻意不跟随软件更名**。
+            //
+            // 软件已从 XAssistant 更名为 Keyboard Assistant，但目录保持 "XAssistant"：
+            // 改目录名的直接后果是用户已有的全部统计（键盘、鼠标、使用记录）
+            // 在界面上瞬间"消失"—— 数据其实还在旧目录里，只是程序不再去读。
+            //
+            // 若将来确实要换名，必须在这里配一次性迁移：检测旧目录存在且新目录不存在时，
+            // 把旧目录整体搬过去，迁移完成再删旧目录。不能只改字符串。
 #if DEBUG
             return "XAssistant_Dev"; // 开发版专用文件夹
 #else

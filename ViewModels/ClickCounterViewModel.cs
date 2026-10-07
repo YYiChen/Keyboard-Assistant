@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -107,6 +108,8 @@ public partial class ClickCounterViewModel : ViewModelBase
         _dayRolloverTimer.Tick += (_, _) => CheckDayRollover();
         _dayRolloverTimer.Start();
 
+        RefreshRangeStatistics();
+
         if (_configService.GetRecordingAutoStart())
         {
             StartRecording();
@@ -143,11 +146,194 @@ public partial class ClickCounterViewModel : ViewModelBase
         OnPropertyChanged(nameof(MouseRecordingColor));
     }
 
+    // ────────────── 时间范围 ──────────────
+
+    /// <summary>当前统计范围（分段控件选择）。</summary>
+    [ObservableProperty]
+    private StatsRange _selectedRange = StatsRange.Today;
+
+    partial void OnSelectedRangeChanged(StatsRange value)
+    {
+        OnPropertyChanged(nameof(IsRangeToday));
+        OnPropertyChanged(nameof(IsRangeYesterday));
+        OnPropertyChanged(nameof(IsRangeLast7Days));
+        OnPropertyChanged(nameof(IsRangeLast30Days));
+        OnPropertyChanged(nameof(RangeLabel));
+
+        // 选快捷范围时把查看日期同步过去，避免"范围显示昨天、日期还停在三天前"
+        switch (value)
+        {
+            case StatsRange.Today:
+                SelectedDate = DateTime.Today;
+                break;
+            case StatsRange.Yesterday:
+                SelectedDate = DateTime.Today.AddDays(-1);
+                break;
+        }
+
+        RefreshRangeStatistics();
+    }
+
+    public bool IsRangeToday
+    {
+        get => SelectedRange == StatsRange.Today;
+        set
+        {
+            if (value)
+                SelectedRange = StatsRange.Today;
+        }
+    }
+
+    public bool IsRangeYesterday
+    {
+        get => SelectedRange == StatsRange.Yesterday;
+        set
+        {
+            if (value)
+                SelectedRange = StatsRange.Yesterday;
+        }
+    }
+
+    public bool IsRangeLast7Days
+    {
+        get => SelectedRange == StatsRange.Last7Days;
+        set
+        {
+            if (value)
+                SelectedRange = StatsRange.Last7Days;
+        }
+    }
+
+    public bool IsRangeLast30Days
+    {
+        get => SelectedRange == StatsRange.Last30Days;
+        set
+        {
+            if (value)
+                SelectedRange = StatsRange.Last30Days;
+        }
+    }
+
+    public string RangeLabel => SelectedRange.Label();
+
+    /// <summary>范围内的左/中/右键点击次数。</summary>
+    [ObservableProperty]
+    private int _rangeLeft;
+
+    [ObservableProperty]
+    private int _rangeMiddle;
+
+    [ObservableProperty]
+    private int _rangeRight;
+
+    public int RangeTotal => RangeLeft + RangeMiddle + RangeRight;
+
+    /// <summary>三种按键的构成比例（占比条数据）。</summary>
+    public ObservableCollection<ClickCompositionItem> ClickComposition { get; } = new();
+
+    /// <summary>
+    /// 按当前范围重算点击统计。
+    /// 自定义单日（Custom）时以 <see cref="SelectedDate"/> 那一天为范围。
+    /// </summary>
+    private void RefreshRangeStatistics()
+    {
+        var (from, to) =
+            SelectedRange == StatsRange.Custom
+                ? (SelectedDate.Date, SelectedDate.Date.AddDays(1))
+                : SelectedRange.ToDateRange();
+
+        var counts = _dbService.GetClickCountsInRange(from, to);
+
+        RangeLeft = counts.GetValueOrDefault("Left");
+        RangeMiddle = counts.GetValueOrDefault("Middle");
+        RangeRight = counts.GetValueOrDefault("Right");
+
+        OnPropertyChanged(nameof(RangeTotal));
+
+        // 构成比例（三项合计为分母）
+        int total = RangeTotal;
+        ClickComposition.Clear();
+        foreach (var (name, count) in new[]
+        {
+            ("左键", RangeLeft),
+            ("中键", RangeMiddle),
+            ("右键", RangeRight),
+        })
+        {
+            ClickComposition.Add(
+                new ClickCompositionItem
+                {
+                    Name = name,
+                    Count = count,
+                    Percent = total > 0 ? count * 100.0 / total : 0,
+                }
+            );
+        }
+    }
+
     // SelectedDate 变更时自动加载对应日期的点击量
     partial void OnSelectedDateChanged(DateTime value)
     {
+        OnPropertyChanged(nameof(DateDisplayText));
+        OnPropertyChanged(nameof(CanGoNext));
+        // 日期变化会改变"今天/昨天"的匹配结果，分段控件要实现刷新选中态
+        OnPropertyChanged(nameof(IsRangeToday));
+        OnPropertyChanged(nameof(IsRangeYesterday));
         LoadCountsForDate(value);
+
+        // 自定义单日模式下，范围统计跟随所选日期
+        if (SelectedRange == StatsRange.Custom)
+            RefreshRangeStatistics();
     }
+
+    // ────────────── 日期切换 ──────────────
+    // 替代原先的原生 Calendar 控件（外观与设计系统冲突，且 Calendar 是
+    // WPF 里样式化成本最高的控件之一）。三键式覆盖"看昨天/前天"这类高频操作。
+
+    /// <summary>形如 "10-08 周三"；当天额外标注。</summary>
+    public string DateDisplayText =>
+        SelectedDate.Date == DateTime.Today
+            ? $"今天 · {SelectedDate:MM-dd}"
+            : $"{SelectedDate:MM-dd} {WeekdayName(SelectedDate.DayOfWeek)}";
+
+    /// <summary>不允许翻到未来（未来的数据必然为空）。</summary>
+    public bool CanGoNext => SelectedDate.Date < DateTime.Today;
+
+    [RelayCommand]
+    private void PreviousDay()
+    {
+        // 用箭头即进入"自定义单日"，分段控件随之取消高亮
+        SelectedRange = StatsRange.Custom;
+        SelectedDate = SelectedDate.AddDays(-1);
+    }
+
+    [RelayCommand]
+    private void NextDay()
+    {
+        if (!CanGoNext)
+            return;
+        SelectedRange = StatsRange.Custom;
+        SelectedDate = SelectedDate.AddDays(1);
+    }
+
+    [RelayCommand]
+    private void GoToToday()
+    {
+        SelectedRange = StatsRange.Today;
+        SelectedDate = DateTime.Today;
+    }
+
+    private static string WeekdayName(DayOfWeek day) =>
+        day switch
+        {
+            DayOfWeek.Monday => "周一",
+            DayOfWeek.Tuesday => "周二",
+            DayOfWeek.Wednesday => "周三",
+            DayOfWeek.Thursday => "周四",
+            DayOfWeek.Friday => "周五",
+            DayOfWeek.Saturday => "周六",
+            _ => "周日",
+        };
 
     private void LoadCountsForDate(DateTime date)
     {

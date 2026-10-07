@@ -148,13 +148,110 @@ public class KeyboardHookService : IKeyboardHookService, IDisposable
         if (result > 0)
             return sb.ToString();
 
-        // GetKeyNameText 无法命名（常见于笔记本 Fn 键等非标准键）。
-        // 扫描码 0x63 是多数笔记本 Fn 的扫描码；其余保留原始码值以便后续识别
+        // ── 回退 1：按虚拟键码查表 ──
+        //
+        // GetKeyNameText 只认扫描码。部分键盘（笔记本内置键盘、远程桌面会话、
+        // 虚拟化环境）会给出 scanCode = 0x00，此时 GetKeyNameText 必然失败，
+        // 而 vkCode 其实是完好的 —— 例如 "vk 0x25" 就是左方向键。
+        //
+        // 原先没有这一层回退，这些键全被记成 "Unknown (scan 0x00, vk 0x25)"
+        // 这类技术串，既污染统计（"最高频按键"栏里显示一串十六进制），
+        // 也无法归入任何有意义的类型。
+        if (VirtualKeyNames.TryGetValue(vkCode, out var byVk))
+            return byVk;
+
+        // 扫描码 0x63 是多数笔记本 Fn 的扫描码
         if (scanCode == 0x63)
             return "Fn";
-        _logger.LogWarning("按键无法识别，扫描码 0x{Scan:X2}，虚拟键码 0x{Vk:X2}，标志 0x{Flags:X2}", scanCode, vkCode, flags);
-        return $"Unknown (scan 0x{scanCode:X2}, vk 0x{vkCode:X2})";
+
+        _logger.LogWarning(
+            "按键无法识别，扫描码 0x{Scan:X2}，虚拟键码 0x{Vk:X2}，标志 0x{Flags:X2}",
+            scanCode,
+            vkCode,
+            flags
+        );
+
+        // 面向用户的名称，不暴露十六进制码值
+        return "未识别键";
     }
+
+    /// <summary>
+    /// 虚拟键码 → 键名。用于扫描码不可用时的回退。
+    /// 覆盖常用键；未列出的仍会走"未识别键"。
+    /// </summary>
+    private static readonly Dictionary<int, string> VirtualKeyNames = new()
+    {
+        [0x08] = "Backspace",
+        [0x09] = "Tab",
+        [0x0D] = "Enter",
+        [0x13] = "Caps Lock",
+        [0x1B] = "Esc",
+        [0x20] = "Space",
+        [0x21] = "Page Up",
+        [0x22] = "Page Down",
+        [0x23] = "End",
+        [0x24] = "Home",
+        [0x25] = "Left",
+        [0x26] = "Up",
+        [0x27] = "Right",
+        [0x28] = "Down",
+        [0x2C] = "Print Screen",
+        [0x2D] = "Insert",
+        [0x2E] = "Delete",
+        [0x5B] = "Left Windows",
+        [0x5C] = "Right Windows",
+        [0x5D] = "Menu",
+        [0x90] = "Num Lock",
+        [0x91] = "Scroll Lock",
+        // 小键盘
+        [0x60] = "Num 0",
+        [0x61] = "Num 1",
+        [0x62] = "Num 2",
+        [0x63] = "Num 3",
+        [0x64] = "Num 4",
+        [0x65] = "Num 5",
+        [0x66] = "Num 6",
+        [0x67] = "Num 7",
+        [0x68] = "Num 8",
+        [0x69] = "Num 9",
+        [0x6A] = "Num *",
+        [0x6B] = "Num +",
+        [0x6D] = "Num -",
+        [0x6E] = "Num .",
+        [0x6F] = "Num /",
+        // 功能键
+        [0x70] = "F1",
+        [0x71] = "F2",
+        [0x72] = "F3",
+        [0x73] = "F4",
+        [0x74] = "F5",
+        [0x75] = "F6",
+        [0x76] = "F7",
+        [0x77] = "F8",
+        [0x78] = "F9",
+        [0x79] = "F10",
+        [0x7A] = "F11",
+        [0x7B] = "F12",
+        // 左右修饰键（未在 ModifierKeyNames 中命中时的兜底）
+        [0xA0] = "Left Shift",
+        [0xA1] = "Right Shift",
+        [0xA2] = "Left Ctrl",
+        [0xA3] = "Right Ctrl",
+        [0xA4] = "Left Alt",
+        [0xA5] = "Right Alt",
+        // OEM 符号键
+        [0xBA] = ";",
+        [0xBB] = "=",
+        [0xBC] = ",",
+        [0xBD] = "-",
+        [0xBE] = ".",
+        [0xBF] = "/",
+        [0xC0] = "`",
+        [0xDB] = "[",
+        [0xDC] = "\\",
+        [0xDD] = "]",
+        [0xDE] = "'",
+    };
 
     // 结构体定义
     [StructLayout(LayoutKind.Sequential)]

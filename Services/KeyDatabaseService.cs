@@ -114,4 +114,118 @@ public class KeyDatabaseService : IKeyDatabaseService
             counts[reader.GetString(0)] = reader.GetInt32(1);
         return counts;
     }
+
+    // ══════════════ 统计查询 ══════════════
+
+    /// <summary>
+    /// 某日的字符串范围。PressTime 以 "o" 格式存储
+    /// （如 "2026-10-08T00:10:48.0733784+08:00"），其字典序等于时间序，
+    /// 因此用定宽前缀的范围比较即可，且能走 idx_keypress_presstime 索引。
+    /// </summary>
+    private static (string From, string To) DayRange(DateTime date)
+    {
+        string day = date.Date.ToString("yyyy-MM-dd");
+        string next = date.Date.AddDays(1).ToString("yyyy-MM-dd");
+        return (day + "T00:00:00", next + "T00:00:00");
+    }
+
+    public int[] GetHourlyCounts(DateTime date)
+    {
+        var result = new int[24];
+        var (from, to) = DayRange(date);
+
+        using var connection = new SqliteConnection(ConnectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        // substr(...,12,2) 取小时：存储串第 12–13 个字符正好是 "HH"
+        cmd.CommandText =
+            @"
+            SELECT substr(PressTime, 12, 2) AS h, COUNT(*)
+            FROM KeyPressRecords
+            WHERE PressTime >= @from AND PressTime < @to
+            GROUP BY h";
+        cmd.Parameters.AddWithValue("@from", from);
+        cmd.Parameters.AddWithValue("@to", to);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (int.TryParse(reader.GetString(0), out int hour) && hour is >= 0 and < 24)
+                result[hour] = reader.GetInt32(1);
+        }
+        return result;
+    }
+
+    public int GetActiveMinuteCount(DateTime from, DateTime to)
+    {
+        using var connection = new SqliteConnection(ConnectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        // 不同的 "HH:mm" 数量 = 有按键的分钟数
+        cmd.CommandText =
+            @"
+            SELECT COUNT(DISTINCT substr(PressTime, 12, 5))
+            FROM KeyPressRecords
+            WHERE PressTime >= @from AND PressTime < @to";
+        cmd.Parameters.AddWithValue("@from", from.Date.ToString("yyyy-MM-dd") + "T00:00:00");
+        cmd.Parameters.AddWithValue("@to", to.Date.ToString("yyyy-MM-dd") + "T00:00:00");
+
+        return Convert.ToInt32(cmd.ExecuteScalar() ?? 0);
+    }
+
+    public int GetActiveDayCount(DateTime from, DateTime to)
+    {
+        using var connection = new SqliteConnection(ConnectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            @"
+            SELECT COUNT(DISTINCT substr(PressTime, 1, 10))
+            FROM KeyPressRecords
+            WHERE PressTime >= @from AND PressTime < @to";
+        cmd.Parameters.AddWithValue("@from", from.Date.ToString("yyyy-MM-dd") + "T00:00:00");
+        cmd.Parameters.AddWithValue("@to", to.Date.ToString("yyyy-MM-dd") + "T00:00:00");
+
+        return Convert.ToInt32(cmd.ExecuteScalar() ?? 0);
+    }
+
+    public List<DailyKeyCount> GetDailyTotals(int days)
+    {
+        var list = new List<DailyKeyCount>();
+        if (days <= 0)
+            return list;
+
+        var start = DateTime.Today.AddDays(-(days - 1));
+        var (from, _) = DayRange(start);
+        var (_, to) = DayRange(DateTime.Today);
+
+        var byDate = new Dictionary<string, int>();
+        using (var connection = new SqliteConnection(ConnectionString))
+        {
+            connection.Open();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText =
+                @"
+                SELECT substr(PressTime, 1, 10) AS d, COUNT(*)
+                FROM KeyPressRecords
+                WHERE PressTime >= @from AND PressTime < @to
+                GROUP BY d";
+            cmd.Parameters.AddWithValue("@from", from);
+            cmd.Parameters.AddWithValue("@to", to);
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                byDate[reader.GetString(0)] = reader.GetInt32(1);
+        }
+
+        // 补齐没有记录的日子：否则趋势图会缺柱、日期轴与实际日期错位
+        for (int i = 0; i < days; i++)
+        {
+            var d = start.AddDays(i);
+            byDate.TryGetValue(d.ToString("yyyy-MM-dd"), out int count);
+            list.Add(new DailyKeyCount(d, count));
+        }
+
+        return list;
+    }
 }

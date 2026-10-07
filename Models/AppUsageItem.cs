@@ -3,21 +3,42 @@ namespace XAssistant.Models;
 public class AppUsageItem
 {
     public string ProcessName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 面向用户的名称，由 <c>AppInfoResolver</c> 解析得到
+    /// （原先这里只是把进程名首字母大写，所以界面上是一屏看不懂的小写英文串）。
+    /// </summary>
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>应用图标，取不到时为 null，界面用首字母色块兜底。</summary>
+    public System.Windows.Media.ImageSource? Icon { get; set; }
+
+    /// <summary>展示名首字符，用于无图标时的占位色块。</summary>
+    public string Initial { get; set; } = "?";
+
     public long TotalSeconds { get; set; }
+
     public DateTime? StartTime { get; set; }
     public DateTime? EndTime { get; set; }
 
+    /// <summary>占当日总时长的百分比（0–100），直接绑到进度条。</summary>
+    public double Percent { get; set; }
+
+    public string PercentText => Percent >= 1 ? $"{Percent:F0}%" : "<1%";
+
     public string FormattedUsage => FormatSeconds(TotalSeconds);
-    public string DisplayName => char.ToUpper(ProcessName[0]) + ProcessName[1..];
 
     public string FormattedStartTime => StartTime?.ToString("HH:mm:ss") ?? "--";
+
     public string FormattedEndTime => EndTime?.ToString("HH:mm:ss") ?? "--";
 
     private static string FormatSeconds(long sec)
     {
         var ts = TimeSpan.FromSeconds(sec);
-        return ts.TotalHours >= 1
-            ? $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}"
-            : $"{ts.Minutes:D2}:{ts.Seconds:D2}";
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours} 小时 {ts.Minutes} 分";
+        if (ts.TotalMinutes >= 1)
+            return $"{(int)ts.TotalMinutes} 分钟";
+        return $"{ts.Seconds} 秒";
     }
 }

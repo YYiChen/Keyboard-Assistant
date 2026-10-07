@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Management;
+using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Timer = System.Threading.Timer;
@@ -10,6 +11,20 @@ namespace XAssistant.Services;
 
 public sealed class ProcessUsageTracker : IDisposable
 {
+    // ────────────── 前台窗口探测 ──────────────
+    //
+    // 只有处于前台的进程才算「用户正在使用它」。
+    //
+    // 缺少这一层时，累计的是**进程存活时长** —— 输入法、显卡驱动、常驻聊天工具
+    // 从开机起就一直"存活"，于是它们的时长全部等于「今天已经过去的时间」，
+    // 彼此一模一样且毫无意义（实测：今日 15 个应用的时长全是 48.1 分钟）。
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
     private readonly ILogger<ProcessUsageTracker> _logger;
     private readonly string _dbPath;
     private const string DbFile = "app_usage.db";
@@ -308,7 +323,13 @@ public sealed class ProcessUsageTracker : IDisposable
                             else
                                 CloseSession(item.id, endOfOldDay, finalAcc);
 
-                            // 为今天创建新会话
+                            // 为今天创建新会话。
+                            //
+                            // 初始累计必须是 0，**不能**写成 (Now − 今天零点)：
+                            // 那是个与具体应用无关的全局量（今天已过去多久），
+                            // 会让所有跨天存活的进程拿到同一个数值 ——
+                            // 实测表现为"今天所有应用的时长都是 48.1 分钟"。
+                            // 今天的用量从此刻起重新累计。
                             var todayStart = DateTime.Today;
                             long newSessionId = InsertAppSession(item.name, todayStart);
                             var newState = new AppSessionState
@@ -316,7 +337,7 @@ public sealed class ProcessUsageTracker : IDisposable
                                 ProcessCount = matchingProcs.Count,
                                 SessionId = newSessionId,
                                 StartTime = todayStart,
-                                AccumulatedSeconds = (DateTime.Now - todayStart).TotalSeconds,
+                                AccumulatedSeconds = 0,
                                 LastUpdateTime = DateTime.Now,
                             };
                             _appSessions[item.name] = newState;
@@ -522,6 +543,39 @@ public sealed class ProcessUsageTracker : IDisposable
     /// 只发现新进程而不清理已退出的，会让 <c>_pidToAppName</c> 无限增长，
     /// 且已退出的应用会话永远不会关闭（EndTime 一直是 NULL）。
     /// </summary>
+    /// <summary>
+    /// 取当前前台窗口所属应用的名称（已归一化）。
+    ///
+    /// 取不到时返回 null —— 此时**不累计任何应用**。宁可少记，也不要把时间
+    /// 错记到某个后台进程头上（那正是"所有应用时长都一样"的由来）。
+    /// </summary>
+    private string? GetForegroundAppName()
+    {
+        try
+        {
+            IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero)
+                return null;
+
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == 0)
+                return null;
+
+            if (_pidToAppName.TryGetValue(pid, out string? known))
+                return known;
+
+            // 前台进程可能刚启动、尚未进入追踪集合，直接按进程名返回；
+            // 下一轮 PollProcesses 会把它正式纳入。
+            using var proc = Process.GetProcessById((int)pid);
+            return NormalizeProcessName(proc.ProcessName);
+        }
+        catch
+        {
+            // 进程恰好退出、权限不足等，都按"取不到"处理
+            return null;
+        }
+    }
+
     private void PollProcesses()
     {
         try
@@ -596,11 +650,26 @@ public sealed class ProcessUsageTracker : IDisposable
         var now = DateTime.Now;
         var updates = new List<(long Id, double Sec, DateTime Time)>();
 
+        // 只有当前处于前台的进程才算「用户在使用」。
+        string? foreground = GetForegroundAppName();
+
         foreach (var kvp in _appSessions)
         {
             var state = kvp.Value;
             if (state.ProcessCount <= 0)
                 continue;
+
+            // 非前台应用：推进时间戳，但不累计时长。
+            //
+            // 必须同步推进 LastUpdateTime —— 否则用户切回该应用时，
+            // 会把"离开期间"的整段时间一次性补记上去，
+            // 等于又把后台时间算成了使用时间。
+            if (!string.Equals(kvp.Key, foreground, StringComparison.OrdinalIgnoreCase))
+            {
+                state.LastUpdateTime = now;
+                continue;
+            }
+
             double delta = (now - state.LastUpdateTime).TotalSeconds;
             if (delta > 0)
             {

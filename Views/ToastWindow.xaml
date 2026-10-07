@@ -11,29 +11,38 @@
   ShowActivated="False"
   Focusable="False"
   SizeToContent="WidthAndHeight">
+  <!--  颜色统一改用设计令牌  -->
   <Border
     x:Name="Root"
-    Background="#F7F7F7"
-    BorderBrush="#CCCCCC"
-    BorderThickness="1"
-    CornerRadius="6"
     Padding="14,10"
+    Background="{StaticResource Brush.Surface}"
+    BorderBrush="{StaticResource Brush.Border.Strong}"
+    BorderThickness="1"
+    CornerRadius="{StaticResource Radius.Medium}"
     MouseLeftButtonUp="Root_MouseLeftButtonUp">
+    <Border.Effect>
+      <DropShadowEffect
+        BlurRadius="14"
+        Direction="270"
+        Opacity="0.14"
+        ShadowDepth="3"
+        Color="#0F172A" />
+    </Border.Effect>
     <StackPanel Orientation="Horizontal">
       <TextBlock
-        Text="✓"
-        Foreground="#4CAF50"
-        FontSize="14"
-        FontWeight="Bold"
+        Margin="0,0,8,0"
         VerticalAlignment="Center"
-        Margin="0,0,8,0" />
+        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+        FontSize="14"
+        Foreground="{StaticResource Brush.Success}"
+        Text="&#xE73E;" />
       <TextBlock
         x:Name="MessageText"
-        TextWrapping="Wrap"
         MaxWidth="300"
-        FontSize="13"
-        Foreground="#333333"
-        VerticalAlignment="Center" />
+        VerticalAlignment="Center"
+        Foreground="{StaticResource Brush.Text.Primary}"
+        Style="{StaticResource Text.Body}"
+        TextWrapping="Wrap" />
     </StackPanel>
   </Border>
 </Window>

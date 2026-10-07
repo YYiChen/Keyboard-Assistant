@@ -118,6 +118,42 @@ public class ClickDatabaseService : IClickDatabaseService
         return counts;
     }
 
+    public Dictionary<string, int> GetClickCountsInRange(DateTime from, DateTime to)
+    {
+        var counts = new Dictionary<string, int>
+        {
+            { "Left", 0 },
+            { "Middle", 0 },
+            { "Right", 0 },
+        };
+
+        string fromStr = from.Date.ToString("yyyy-MM-dd") + "T00:00:00";
+        string toStr = to.Date.ToString("yyyy-MM-dd") + "T00:00:00";
+
+        using var connection = new SqliteConnection(ConnectionString);
+        connection.Open();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText =
+            @"
+            SELECT Button, COUNT(*)
+            FROM ClickRecords
+            WHERE ClickTime >= @from AND ClickTime < @to
+            GROUP BY Button";
+        cmd.Parameters.AddWithValue("@from", fromStr);
+        cmd.Parameters.AddWithValue("@to", toStr);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            string button = reader.GetString(0);
+            counts[button] = counts.TryGetValue(button, out int existing)
+                ? existing + reader.GetInt32(1)
+                : reader.GetInt32(1);
+        }
+
+        return counts;
+    }
+
     // 后续分析用：获取所有记录或聚合数据
     public List<MouseClickRecord> GetAllRecords()
     {

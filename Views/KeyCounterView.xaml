@@ -5,148 +5,387 @@
   xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
   xmlns:vm="clr-namespace:XAssistant.ViewModels">
   <UserControl.Resources>
-    <!--  四个排序视图  -->
-    <CollectionViewSource x:Key="SortedTotal" Source="{Binding KeyCounts, StringFormat=N0}">
+    <!--  四个排序视图（明细表用）  -->
+    <CollectionViewSource x:Key="SortedTotal" Source="{Binding KeyCounts}">
       <CollectionViewSource.SortDescriptions>
-        <scm:SortDescription Direction="Ascending" PropertyName="Length" />
-        <scm:SortDescription Direction="Ascending" PropertyName="Key" />
+        <scm:SortDescription Direction="Descending" PropertyName="Count" />
       </CollectionViewSource.SortDescriptions>
     </CollectionViewSource>
-    <CollectionViewSource x:Key="SortedToday" Source="{Binding TodayKeyCounts, StringFormat=N0}">
+    <CollectionViewSource x:Key="SortedToday" Source="{Binding TodayKeyCounts}">
       <CollectionViewSource.SortDescriptions>
-        <scm:SortDescription Direction="Ascending" PropertyName="Length" />
-        <scm:SortDescription Direction="Ascending" PropertyName="Key" />
+        <scm:SortDescription Direction="Descending" PropertyName="Count" />
       </CollectionViewSource.SortDescriptions>
     </CollectionViewSource>
-    <CollectionViewSource x:Key="SortedYesterday" Source="{Binding YesterdayKeyCounts, StringFormat=N0}">
+    <CollectionViewSource x:Key="SortedYesterday" Source="{Binding YesterdayKeyCounts}">
       <CollectionViewSource.SortDescriptions>
-        <scm:SortDescription Direction="Ascending" PropertyName="Length" />
-        <scm:SortDescription Direction="Ascending" PropertyName="Key" />
+        <scm:SortDescription Direction="Descending" PropertyName="Count" />
       </CollectionViewSource.SortDescriptions>
     </CollectionViewSource>
-    <CollectionViewSource x:Key="SortedDayBefore" Source="{Binding DayBeforeYesterdayKeyCounts, StringFormat=N0}">
+    <CollectionViewSource x:Key="SortedDayBefore" Source="{Binding DayBeforeYesterdayKeyCounts}">
       <CollectionViewSource.SortDescriptions>
-        <scm:SortDescription Direction="Ascending" PropertyName="Length" />
-        <scm:SortDescription Direction="Ascending" PropertyName="Key" />
+        <scm:SortDescription Direction="Descending" PropertyName="Count" />
       </CollectionViewSource.SortDescriptions>
     </CollectionViewSource>
   </UserControl.Resources>
 
-  <DockPanel>
-    <!--
-      顶部状态区。
+  <ScrollViewer
+    HorizontalScrollBarVisibility="Disabled"
+    VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="24">
 
-      原先这里是一对「开始录制 / 停止录制」按钮。按 2026-10-07 的决策，
-      记录开关已统一移到「设置」页 —— 原因是键盘页用 Visibility 切换按钮、
-      鼠标页却用 IsEnabled，两处行为并不一致，且同一个概念在两个页面各放一套。
-      本页现在只显示状态，不再提供开关。
-    -->
-    <StackPanel
-      Margin="20,16,20,12"
-      DockPanel.Dock="Top"
-      Orientation="Horizontal">
-      <Ellipse
-        Style="{StaticResource Status.Dot}"
-        Fill="{Binding KeyRecordingColor}"
-        VerticalAlignment="Center" />
-      <TextBlock
-        VerticalAlignment="Center"
-        Style="{StaticResource Text.Body}"
-        Text="{Binding KeyRecordingStatus}" />
-      <TextBlock
-        Margin="12,0,0,0"
-        VerticalAlignment="Center"
-        Style="{StaticResource Text.Caption}"
-        Text="记录开关已移至「设置」页" />
+      <!--  ══════════ 标题 ══════════  -->
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <StackPanel Grid.Column="0">
+          <TextBlock Style="{StaticResource Text.Title}" Text="键盘记录" />
+          <TextBlock
+            Margin="0,4,0,0"
+            Style="{StaticResource Text.Secondary}"
+            Text="统计按键次数与频率，不记录输入内容。" />
+        </StackPanel>
+        <StackPanel
+          Grid.Column="1"
+          VerticalAlignment="Center"
+          Orientation="Horizontal">
+          <Ellipse Style="{StaticResource Status.Dot}" Fill="{Binding KeyRecordingColor}" />
+          <TextBlock
+            VerticalAlignment="Center"
+            Style="{StaticResource Text.Caption}"
+            Text="{Binding KeyRecordingStatus}" />
+          <Button
+            Margin="12,0,0,0"
+            Command="{Binding RefreshDataCommand}"
+            Content="刷新"
+            Style="{StaticResource Button.Ghost}" />
+        </StackPanel>
+      </Grid>
 
-      <Button
-        Margin="16,0,0,0"
-        VerticalAlignment="Center"
-        Command="{Binding RefreshDataCommand}"
-        Content="刷新数据"
-        Style="{StaticResource Button.Secondary}" />
-    </StackPanel>
+      <!--  时间范围快捷切换  -->
+      <Border Margin="0,16,0,0" Style="{StaticResource Segmented}">
+        <StackPanel Orientation="Horizontal">
+          <RadioButton
+            Content="今天"
+            GroupName="KeyRange"
+            IsChecked="{Binding IsRangeToday}"
+            Style="{StaticResource Segmented.Item}" />
+          <RadioButton
+            Content="昨天"
+            GroupName="KeyRange"
+            IsChecked="{Binding IsRangeYesterday}"
+            Style="{StaticResource Segmented.Item}" />
+          <RadioButton
+            Content="近 7 天"
+            GroupName="KeyRange"
+            IsChecked="{Binding IsRangeLast7Days}"
+            Style="{StaticResource Segmented.Item}" />
+          <RadioButton
+            Content="近 30 天"
+            GroupName="KeyRange"
+            IsChecked="{Binding IsRangeLast30Days}"
+            Style="{StaticResource Segmented.Item}" />
+        </StackPanel>
+      </Border>
 
-    <!--
-      汇总区。
+      <!--  ══════════ 指标 ══════════  -->
+      <Border Margin="0,18,0,0" Style="{StaticResource Card}">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
 
-      此前本页只有下方那张「按键 → 次数」明细表，没有「今天一共按了多少次」
-      这样的一眼可见数字 —— 而鼠标页是有「总计 / 今天」分区的，两页信息层级不一致。
-      ViewModel 里的 KeyTodayPresses / KeyTotalPresses 一直存在却从未被绑定，
-      这里把它们用上。
-    -->
-    <Border
-      DockPanel.Dock="Top"
-      Margin="20,0,20,12"
-      Style="{StaticResource Card}">
-      <StackPanel Orientation="Horizontal">
+          <!--  范围按键总数  -->
+          <StackPanel Grid.Column="0">
+            <TextBlock
+              Style="{StaticResource Text.Caption}"
+              Text="{Binding RangeLabel, StringFormat='{}{0}按键'}" />
+            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+              <TextBlock Style="{StaticResource Text.MetricLarge}" Text="{Binding RangeTotal, StringFormat=N0}" />
+              <TextBlock Style="{StaticResource Text.MetricUnit}" Text="次" />
+            </StackPanel>
+            <TextBlock
+              Margin="0,4,0,0"
+              Style="{StaticResource Text.Caption}"
+              Text="{Binding TodayDeltaText}" />
+          </StackPanel>
+
+          <!--  平均频率  -->
+          <StackPanel Grid.Column="1">
+            <TextBlock Style="{StaticResource Text.Caption}" Text="平均频率" />
+            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+              <TextBlock Style="{StaticResource Text.MetricLarge}" Text="{Binding TodayKpm, StringFormat=N0}" />
+              <TextBlock Style="{StaticResource Text.MetricUnit}" Text="键/分" />
+            </StackPanel>
+            <TextBlock
+              Margin="0,4,0,0"
+              Style="{StaticResource Text.Caption}"
+              Text="{Binding RangeDailyAverageText}" />
+          </StackPanel>
+
+          <!--  活跃时长  -->
+          <StackPanel Grid.Column="2">
+            <TextBlock Style="{StaticResource Text.Caption}" Text="活跃时长" />
+            <StackPanel Margin="0,6,0,0" Orientation="Horizontal">
+              <TextBlock Style="{StaticResource Text.Metric}" Text="{Binding TodayActiveText}" />
+            </StackPanel>
+            <TextBlock
+              Margin="0,4,0,0"
+              Style="{StaticResource Text.Caption}"
+              Text="{Binding RangeActiveDays, StringFormat='{}{0} 天有输入记录'}" />
+          </StackPanel>
+
+          <!--  最高频键  -->
+          <StackPanel Grid.Column="3">
+            <TextBlock Style="{StaticResource Text.Caption}" Text="最高频按键" />
+            <TextBlock
+              Margin="0,8,0,0"
+              Style="{StaticResource Text.Metric}"
+              Text="{Binding TopKeyText}"
+              TextTrimming="CharacterEllipsis" />
+            <TextBlock
+              Margin="0,4,0,0"
+              Style="{StaticResource Text.Caption}"
+              Text="今日" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!--  ══════════ 今日时段分布 ══════════  -->
+      <Border Margin="0,16,0,0" Style="{StaticResource Card}">
         <StackPanel>
-          <TextBlock
-            Style="{StaticResource Text.MetricLarge}"
-            Text="{Binding KeyTodayPresses, StringFormat=N0}" />
+          <TextBlock Style="{StaticResource Text.SectionHeader}" Text="今日输入时段" />
           <TextBlock
             Margin="0,2,0,0"
             Style="{StaticResource Text.Caption}"
-            Text="今日按键" />
-        </StackPanel>
-        <StackPanel Margin="56,0,0,0">
-          <TextBlock
-            Style="{StaticResource Text.MetricLarge}"
-            Text="{Binding KeyTotalPresses, StringFormat=N0}" />
-          <TextBlock
-            Margin="0,2,0,0"
-            Style="{StaticResource Text.Caption}"
-            Text="历史总计" />
-        </StackPanel>
-      </StackPanel>
-    </Border>
+            Text="每根柱代表一小时，高度表示该小时的按键量。"
+            TextWrapping="Wrap" />
 
-    <!--  Tab 切换区  -->
-    <TabControl SelectedIndex="{Binding SelectedTabIndex}">
-      <TabItem Header="总计">
-        <DataGrid
-          AutoGenerateColumns="False"
-          ColumnWidth="*"
-          ItemsSource="{Binding Source={StaticResource SortedTotal}}">
-          <DataGrid.Columns>
-            <DataGridTextColumn Binding="{Binding Key}" Header="按键" />
-            <DataGridTextColumn Binding="{Binding Count, StringFormat=N0}" Header="次数" />
-          </DataGrid.Columns>
-        </DataGrid>
-      </TabItem>
-      <TabItem Header="今天">
-        <DataGrid
-          AutoGenerateColumns="False"
-          ColumnWidth="*"
-          ItemsSource="{Binding Source={StaticResource SortedToday}}">
-          <DataGrid.Columns>
-            <DataGridTextColumn Binding="{Binding Key}" Header="按键" />
-            <DataGridTextColumn Binding="{Binding Count, StringFormat=N0}" Header="次数" />
-          </DataGrid.Columns>
-        </DataGrid>
-      </TabItem>
-      <TabItem Header="昨天">
-        <DataGrid
-          AutoGenerateColumns="False"
-          ColumnWidth="*"
-          ItemsSource="{Binding Source={StaticResource SortedYesterday}}">
-          <DataGrid.Columns>
-            <DataGridTextColumn Binding="{Binding Key}" Header="按键" />
-            <DataGridTextColumn Binding="{Binding Count, StringFormat=N0}" Header="次数" />
-          </DataGrid.Columns>
-        </DataGrid>
-      </TabItem>
-      <TabItem Header="前天">
-        <DataGrid
-          AutoGenerateColumns="False"
-          ColumnWidth="*"
-          ItemsSource="{Binding Source={StaticResource SortedDayBefore}}">
-          <DataGrid.Columns>
-            <DataGridTextColumn Binding="{Binding Key}" Header="按键" />
-            <DataGridTextColumn Binding="{Binding Count, StringFormat=N0}" Header="次数" />
-          </DataGrid.Columns>
-        </DataGrid>
-      </TabItem>
-    </TabControl>
-  </DockPanel>
+          <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding HourlyBars}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <UniformGrid Rows="1" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <StackPanel VerticalAlignment="Bottom">
+                  <Border
+                    HorizontalAlignment="Stretch"
+                    Margin="2,0">
+                    <Border.Style>
+                      <Style BasedOn="{StaticResource Viz.SparkBar}" TargetType="Border">
+                        <Setter Property="Height" Value="{Binding Height}" />
+                        <Setter Property="Width" Value="Auto" />
+                        <Style.Triggers>
+                          <!--  无数据的时段画一条轨道色细线，避免图上出现缺口  -->
+                          <DataTrigger Binding="{Binding HasData}" Value="False">
+                            <Setter Property="Height" Value="2" />
+                            <Setter Property="Background" Value="{StaticResource Brush.Chart.Track}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Border.Style>
+                  </Border>
+                  <TextBlock
+                    Margin="0,6,0,0"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource Text.Caption}"
+                    Text="{Binding Label}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!--  ══════════ 类型分布 + 排行（两列） ══════════  -->
+      <Grid Margin="0,16,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="16" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!--  按键类型分布  -->
+        <Border Grid.Column="0" Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Style="{StaticResource Text.SectionHeader}" Text="按键类型" />
+            <TextBlock
+              Margin="0,2,0,0"
+              Style="{StaticResource Text.Caption}"
+              Text="今天按下的键分别属于哪一类。" />
+
+            <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding CategoryBreakdown}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                      Grid.Column="0"
+                      Width="56"
+                      Style="{StaticResource Text.Body}"
+                      Text="{Binding Name}" />
+                    <ProgressBar
+                      Grid.Column="1"
+                      Margin="0,0,10,0"
+                      VerticalAlignment="Center"
+                      Maximum="100"
+                      Style="{StaticResource Viz.Bar}"
+                      Value="{Binding Percent}" />
+                    <TextBlock
+                      Grid.Column="2"
+                      Width="72"
+                      Style="{StaticResource Viz.RankValue}"
+                      Text="{Binding Count, StringFormat=N0}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <!--  高频按键 Top 10  -->
+        <Border Grid.Column="2" Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Style="{StaticResource Text.SectionHeader}" Text="高频按键" />
+            <TextBlock
+              Margin="0,2,0,0"
+              Style="{StaticResource Text.Caption}"
+              Text="今日按得最多的前 10 个键。" />
+
+            <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding TopKeys}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                      Grid.Column="0"
+                      Style="{StaticResource Viz.RankLabel}"
+                      Text="{Binding Key}" />
+                    <ProgressBar
+                      Grid.Column="1"
+                      Margin="8,0,10,0"
+                      VerticalAlignment="Center"
+                      Maximum="100"
+                      Style="{StaticResource Viz.Bar}"
+                      Value="{Binding Percent}" />
+                    <TextBlock
+                      Grid.Column="2"
+                      Style="{StaticResource Viz.RankValue}"
+                      Text="{Binding Count, StringFormat=N0}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <!--  ══════════ 明细 ══════════  -->
+      <Border Margin="0,16,0,24" Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Style="{StaticResource Text.SectionHeader}" Text="按键明细" />
+          <TextBlock
+            Margin="0,2,0,0"
+            Style="{StaticResource Text.Caption}"
+            Text="逐键次数。需要精确核对时看这里。" />
+
+          <TabControl
+            Margin="0,14,0,0"
+            SelectedIndex="{Binding SelectedTabIndex}"
+            Style="{StaticResource TabControl.Modern}">
+            <TabItem Header="总计">
+              <DataGrid
+                MaxHeight="360"
+                ItemsSource="{Binding Source={StaticResource SortedTotal}}"
+                Style="{StaticResource DataGrid.Modern}">
+                <DataGrid.Columns>
+                  <DataGridTextColumn
+                    Width="*"
+                    Binding="{Binding Key}"
+                    Header="按键" />
+                  <DataGridTextColumn
+                    Width="140"
+                    Binding="{Binding Count, StringFormat=N0}"
+                    CellStyle="{StaticResource DataGrid.Modern.NumericCell}"
+                    Header="次数"
+                    HeaderStyle="{StaticResource DataGrid.Modern.NumericHeader}" />
+                </DataGrid.Columns>
+              </DataGrid>
+            </TabItem>
+            <TabItem Header="今天">
+              <DataGrid
+                MaxHeight="360"
+                ItemsSource="{Binding Source={StaticResource SortedToday}}"
+                Style="{StaticResource DataGrid.Modern}">
+                <DataGrid.Columns>
+                  <DataGridTextColumn
+                    Width="*"
+                    Binding="{Binding Key}"
+                    Header="按键" />
+                  <DataGridTextColumn
+                    Width="140"
+                    Binding="{Binding Count, StringFormat=N0}"
+                    CellStyle="{StaticResource DataGrid.Modern.NumericCell}"
+                    Header="次数"
+                    HeaderStyle="{StaticResource DataGrid.Modern.NumericHeader}" />
+                </DataGrid.Columns>
+              </DataGrid>
+            </TabItem>
+            <TabItem Header="昨天">
+              <DataGrid
+                MaxHeight="360"
+                ItemsSource="{Binding Source={StaticResource SortedYesterday}}"
+                Style="{StaticResource DataGrid.Modern}">
+                <DataGrid.Columns>
+                  <DataGridTextColumn
+                    Width="*"
+                    Binding="{Binding Key}"
+                    Header="按键" />
+                  <DataGridTextColumn
+                    Width="140"
+                    Binding="{Binding Count, StringFormat=N0}"
+                    CellStyle="{StaticResource DataGrid.Modern.NumericCell}"
+                    Header="次数"
+                    HeaderStyle="{StaticResource DataGrid.Modern.NumericHeader}" />
+                </DataGrid.Columns>
+              </DataGrid>
+            </TabItem>
+            <TabItem Header="前天">
+              <DataGrid
+                MaxHeight="360"
+                ItemsSource="{Binding Source={StaticResource SortedDayBefore}}"
+                Style="{StaticResource DataGrid.Modern}">
+                <DataGrid.Columns>
+                  <DataGridTextColumn
+                    Width="*"
+                    Binding="{Binding Key}"
+                    Header="按键" />
+                  <DataGridTextColumn
+                    Width="140"
+                    Binding="{Binding Count, StringFormat=N0}"
+                    CellStyle="{StaticResource DataGrid.Modern.NumericCell}"
+                    Header="次数"
+                    HeaderStyle="{StaticResource DataGrid.Modern.NumericHeader}" />
+                </DataGrid.Columns>
+              </DataGrid>
+            </TabItem>
+          </TabControl>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
 </UserControl>

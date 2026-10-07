@@ -25,10 +25,10 @@ public sealed class SingleInstanceGuard : IDisposable
     /// （只有管理员与服务默认持有）。本程序以普通权限运行，
     /// 用会话级（Local）命名空间即可满足「同一用户不重复启动」的需求。
     /// </summary>
-    private const string MutexName = "XAssistant.SingleInstance.Mutex";
+    private const string MutexName = "KeyboardAssistant.SingleInstance.Mutex";
 
     /// <summary>与 UsageTracker 的管道区分开，避免混淆。</summary>
-    private const string PipeName = "XAssistant.ShowWindow.Pipe";
+    private const string PipeName = "KeyboardAssistant.ShowWindow.Pipe";
 
     private const string ShowCommand = "SHOW";
 
