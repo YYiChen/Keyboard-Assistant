@@ -37,6 +37,15 @@ public sealed class ProcessUsageTracker : IDisposable
     private readonly ConcurrentDictionary<uint, string> _pidToAppName = new();
     private readonly ConcurrentDictionary<uint, PendingProcessInfo> _pendingProcesses = new();
 
+    /// <summary>
+    /// 保护「检查应用是否已追踪 → 不存在才插入数据库」这一段的原子性。
+    ///
+    /// 不能用 <c>ConcurrentDictionary.AddOrUpdate</c> 代替：它的 addValueFactory
+    /// 在并发下可能被调用多次，而插入数据库是有副作用的操作，
+    /// 会导致同一应用产生多条会话记录（详见 <see cref="AddProcessToAppSession"/>）。
+    /// </summary>
+    private readonly object _sessionLock = new();
+
     private ManagementEventWatcher? _startWatcher;
     private ManagementEventWatcher? _stopWatcher;
     private Timer? _titleRefreshTimer;
@@ -659,14 +668,18 @@ public sealed class ProcessUsageTracker : IDisposable
             if (state.ProcessCount <= 0)
                 continue;
 
-            // 非前台应用：推进时间戳，但不累计时长。
+            // 非前台应用：不累积时长，但**必须**把时间戳写回数据库。
             //
-            // 必须同步推进 LastUpdateTime —— 否则用户切回该应用时，
-            // 会把"离开期间"的整段时间一次性补记上去，
-            // 等于又把后台时间算成了使用时间。
+            // 这里踩过一次坑：起先只改了内存中的 state.LastUpdateTime，
+            // 没有加入 updates 列表，于是数据库里的 LastUpdateTime 一直停在旧值。
+            // 而界面查询用的是
+            //     AccumulatedSeconds + (now - LastUpdateTime) * 86400
+            // 数据库时间戳不动 → 前端每次刷新都在"从旧时间戳算到现在"，
+            // 时长持续虚增（实测每十几秒就涨一分钟），用户一眼就看出不对。
             if (!string.Equals(kvp.Key, foreground, StringComparison.OrdinalIgnoreCase))
             {
                 state.LastUpdateTime = now;
+                updates.Add((state.SessionId, state.AccumulatedSeconds, now));
                 continue;
             }
 
@@ -728,26 +741,36 @@ public sealed class ProcessUsageTracker : IDisposable
     )
     {
         _pidToAppName[processId] = appName;
-        _appSessions.AddOrUpdate(
-            appName,
-            _ =>
+
+        // ⚠ 这里必须加锁，不能再用 ConcurrentDictionary.AddOrUpdate。
+        //
+        // AddOrUpdate 的 addValueFactory 在并发下**可能被调用多次**（即使最终只有一个值胜出），
+        // 而那个委托里调用了 InsertAppSession —— 它会写数据库。
+        // 实测后果：同一个应用被插入两条会话记录，内存里却只保留一个 state，
+        // 剩下那条永远不再更新，变成"孤儿会话"：
+        //   · 界面上该应用出现两条并存会话（重复计时）
+        //   · 孤儿会话的 LastUpdateTime 停在插入那一刻，
+        //     而查询 SQL 会对 EndTime IS NULL 的记录做"到现在"的补偿 → 时长虚增
+        //
+        // 用锁把「检查是否已存在 → 不存在才插库」变成原子操作，副作用就只会发生一次。
+        lock (_sessionLock)
+        {
+            if (_appSessions.TryGetValue(appName, out var existing))
             {
-                var sessionId = InsertAppSession(appName, startTime);
-                return new AppSessionState
-                {
-                    ProcessCount = 1,
-                    SessionId = sessionId,
-                    StartTime = startTime,
-                    LastUpdateTime = startTime,
-                    AccumulatedSeconds = 0,
-                };
-            },
-            (_, state) =>
-            {
-                Interlocked.Increment(ref state.ProcessCount);
-                return state;
+                Interlocked.Increment(ref existing.ProcessCount);
+                return;
             }
-        );
+
+            long sessionId = InsertAppSession(appName, startTime);
+            _appSessions[appName] = new AppSessionState
+            {
+                ProcessCount = 1,
+                SessionId = sessionId,
+                StartTime = startTime,
+                LastUpdateTime = startTime,
+                AccumulatedSeconds = 0,
+            };
+        }
     }
 
     private void RemoveProcessFromAppSession(uint processId)

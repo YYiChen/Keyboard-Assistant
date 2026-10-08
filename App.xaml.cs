@@ -392,7 +392,7 @@ public partial class App : System.Windows.Application
         {
             Icon = GetAppIcon(),
             Visible = true,
-            Text = "XAssistant",
+            Text = "Keyboard Assistant",
         };
 
         // 左键单击托盘图标 → 显示主窗口
@@ -436,6 +436,31 @@ public partial class App : System.Windows.Application
 
     private static Icon GetAppIcon()
     {
+        // ── 优先：从嵌入的 WPF 资源加载 ──
+        //
+        // 原先只走 ExtractAssociatedIcon(ProcessPath)，它有两个问题：
+        //   1. 取到的是 exe PE 资源里"第一个"图标，尺寸不可控，托盘里可能偏小偏糊；
+        //   2. 若 PE 图标资源写入异常（构建链、杀软改写等），直接返回 null，
+        //      代码再静默回退到 SystemIcons.Application（一个通用空白图标）。
+        //
+        // 从程序集资源加载则完全可控：图标是构建产物的一部分，
+        // 且能显式指定托盘所需尺寸。
+        try
+        {
+            var uri = new Uri("pack://application:,,,/Assets/app-icon.ico");
+            var resource = System.Windows.Application.GetResourceStream(uri);
+            if (resource?.Stream is { } stream)
+            {
+                using (stream)
+                    return new Icon(stream, new System.Drawing.Size(32, 32));
+            }
+        }
+        catch
+        {
+            // 落到下面的回退路径
+        }
+
+        // ── 回退：从 exe 提取 ──
         try
         {
             var icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
@@ -446,6 +471,7 @@ public partial class App : System.Windows.Application
         {
             // 忽略错误，使用默认图标
         }
+
         return SystemIcons.Application;
     }
 

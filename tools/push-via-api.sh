@@ -5,9 +5,11 @@
 # 注意：所有大 JSON 必须走 --input 文件，不能用 -f（命令行长度限制）。
 set -euo pipefail
 
-REPO="YYiChen/XAssistant"
-LOCAL="C:/Users/32126/WorkBuddy/2026-10-02-16-09-38/XAssistant"
-BRANCH="feat/personal-fork"
+# 目标仓库。可用环境变量覆盖，便于把同一份代码推到不同仓库
+# （例如从旧的 fork 迁到自建的 Keyboard-Assistant）。
+REPO="${REPO:-YYiChen/Keyboard-Assistant}"
+LOCAL="${LOCAL:-C:/Users/32126/WorkBuddy/2026-10-02-16-09-38/XAssistant}"
+BRANCH="${BRANCH:-feat/personal-fork}"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 

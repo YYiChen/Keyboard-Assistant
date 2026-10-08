@@ -19,6 +19,7 @@ public partial class AppUsageViewModel : ViewModelBase
     private readonly DispatcherTimer _timer;
     private readonly ILogger<AppUsageViewModel> _logger;
     private readonly AppInfoResolver _appInfo;
+    private readonly ActivityDataService _activityData;
 
     [ObservableProperty]
     private DateTime _selectedDate = DateTime.Today;
@@ -26,9 +27,22 @@ public partial class AppUsageViewModel : ViewModelBase
     [ObservableProperty]
     private ObservableCollection<AppUsageItem> _appUsageList = new();
 
-    /// <summary>当天所有应用的总时长文本（用于"这几个应用加起来多久"）。</summary>
+    /// <summary>
+    /// 电脑使用时长（键鼠活动的并集，天然不重叠）。
+    ///
+    /// 原先这里显示的是"各应用时长求和"，那是个**没有意义**的指标：
+    /// 电脑上多个软件会同时开启，同一段时间会被重复计入多次。
+    /// 实测 10-02 那天求和得到 607.9 小时 —— 而一天只有 24 小时。
+    ///
+    /// 所以主指标改为"电脑使用时长"（= 人在电脑前多久），
+    /// 各应用的时长仍各自列出（那是"我在哪个应用上花了时间"）。
+    /// </summary>
     [ObservableProperty]
-    private string _totalUsageText = "—";
+    private string _computerUsageText = "—";
+
+    /// <summary>各应用时长之和。会大于电脑使用时长（因为重叠），仅作参考。</summary>
+    [ObservableProperty]
+    private string _appSumText = "—";
 
     /// <summary>当天出现过的应用数量。</summary>
     [ObservableProperty]
@@ -42,10 +56,15 @@ public partial class AppUsageViewModel : ViewModelBase
 
     private const int RefreshIntervalSeconds = 2;
 
-    public AppUsageViewModel(ILogger<AppUsageViewModel> logger, AppInfoResolver appInfo)
+    public AppUsageViewModel(
+        ILogger<AppUsageViewModel> logger,
+        AppInfoResolver appInfo,
+        ActivityDataService activityData
+    )
     {
         _logger = logger;
         _appInfo = appInfo;
+        _activityData = activityData;
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(RefreshIntervalSeconds) };
         _timer.Tick += async (_, _) => await RefreshAsync();
         _timer.Start();
@@ -112,17 +131,29 @@ public partial class AppUsageViewModel : ViewModelBase
         {
             var list = await LoadAppUsageAsync(SelectedDate);
 
-            // ── 派生指标：总时长 / 应用数 / 占比 ──
-            long totalSeconds = list.Sum(x => x.TotalSeconds);
+            // ── 派生指标 ──
+            // 各应用时长之和（会因应用并行开启而重叠，只作参考）
+            long appSumSeconds = list.Sum(x => x.TotalSeconds);
 
+            // 占比以"各应用之和"为分母：占比要回答的是
+            // "在所有这些应用的使用量里，这个应用占多少"，用重叠和有明确含义。
             foreach (var item in list)
-                item.Percent = totalSeconds > 0 ? item.TotalSeconds * 100.0 / totalSeconds : 0;
+                item.Percent = appSumSeconds > 0 ? item.TotalSeconds * 100.0 / appSumSeconds : 0;
 
             AppUsageList = new ObservableCollection<AppUsageItem>(list);
 
-            TotalUsageText = FormatTotal(totalSeconds);
             AppCount = list.Count;
             TopAppText = list.Count > 0 ? list[0].DisplayName : "—";
+            AppSumText = FormatTotal(appSumSeconds);
+
+            // 主指标：电脑使用时长（键鼠活动并集，不重叠）
+            var active = await Task.Run(() =>
+                _activityData.GetActiveDuration(
+                    SelectedDate.Date,
+                    SelectedDate.Date.AddDays(1)
+                )
+            );
+            ComputerUsageText = active > TimeSpan.Zero ? ActivityCalculator.Format(active) : "—";
         }
         catch (Exception ex)
         {
@@ -161,9 +192,18 @@ public partial class AppUsageViewModel : ViewModelBase
                     @"
                 SELECT ProcessName,
                     SUM(
-                        CASE WHEN EndTime IS NULL 
-                            THEN AccumulatedSeconds + (julianday('now','localtime') - julianday(COALESCE(LastUpdateTime, StartTime))) * 86400
-                            ELSE AccumulatedSeconds
+                        CASE WHEN EndTime IS NULL THEN
+                            -- 运行中的会话：已累计值 + 从最后一次刷新到现在的补偿。
+                            --
+                            -- 补偿值必须设上限：数据库里的 LastUpdateTime 若因异常
+                            -- （进程被强杀、时钟回拨、旧版本留下的残留）而停在很久以前，
+                            -- 无上限的补偿会把时长算成几十小时。
+                            -- 上限取「今天已过去的时间」—— 单日使用时长不可能超过这个值。
+                            MIN(
+                                AccumulatedSeconds + (julianday('now','localtime') - julianday(COALESCE(LastUpdateTime, StartTime))) * 86400,
+                                (julianday('now','localtime') - julianday($dayStart)) * 86400
+                            )
+                        ELSE AccumulatedSeconds
                         END
                     ) AS Seconds,
                     MIN(StartTime) AS StartTime,
@@ -173,6 +213,8 @@ public partial class AppUsageViewModel : ViewModelBase
                 GROUP BY ProcessName
                 ORDER BY Seconds DESC";
                 cmd.Parameters.AddWithValue("$date", dateStr);
+                // 当日零点，用于给补偿值封顶
+                cmd.Parameters.AddWithValue("$dayStart", date.ToString("yyyy-MM-dd") + " 00:00:00");
 
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())

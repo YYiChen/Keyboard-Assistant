@@ -65,6 +65,16 @@
     <EmbeddedResource Remove="XAssistant.Service\**" />
     <None Remove="XAssistant.Service\**" />
     <Page Remove="XAssistant.Service\**" />
+
+    <!--
+      Tests 是独立的测试工程，不能并入主程序集：
+      它的 obj/ 里也有自动生成的 AssemblyInfo，两边一起编译会报
+      CS0579「特性重复」。主项目只负责产品代码。
+    -->
+    <Compile Remove="Tests\**" />
+    <EmbeddedResource Remove="Tests\**" />
+    <None Remove="Tests\**" />
+    <Page Remove="Tests\**" />
   </ItemGroup>
 
   <ItemGroup>

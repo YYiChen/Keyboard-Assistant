@@ -418,6 +418,19 @@
         <ControlTemplate TargetType="ProgressBar">
           <Grid>
             <Border Background="{TemplateBinding Background}" CornerRadius="4" />
+
+            <!--
+              ⚠ PART_Track 不可省略。
+
+              WPF 的 ProgressBar 在 OnApplyTemplate 时查找名为 PART_Track 的元素，
+              用它来取得"轨道可用宽度"，再据此按百分比设置 PART_Indicator 的宽度。
+              此前模板里只有 PART_Indicator、没有 PART_Track，宽度计算拿不到参考，
+              指示条宽度恒为 0 —— 表现就是界面上蓝条完全不显示。
+
+              这里用透明 Border 占位：它不参与视觉，只提供宽度测量。
+            -->
+            <Border x:Name="PART_Track" Background="Transparent" />
+
             <Border
               x:Name="PART_Indicator"
               HorizontalAlignment="Left"

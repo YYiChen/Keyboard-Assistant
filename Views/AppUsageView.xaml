@@ -99,13 +99,13 @@
           Margin="0,0,6,0"
           Style="{StaticResource Card.Tint.Blue}">
           <StackPanel>
-            <TextBlock Style="{StaticResource MetricCard.Label}" Text="应用使用总时长" />
+            <TextBlock Style="{StaticResource MetricCard.Label}" Text="电脑使用时长" />
             <TextBlock
               Foreground="{StaticResource Brush.Blue.Text}"
               Style="{StaticResource MetricCard.Value}"
-              Text="{Binding TotalUsageText}"
+              Text="{Binding ComputerUsageText}"
               TextTrimming="CharacterEllipsis" />
-            <TextBlock Style="{StaticResource MetricCard.Sub}" Text="各应用累计" />
+            <TextBlock Style="{StaticResource MetricCard.Sub}" Text="键鼠活动合并，不重叠" />
           </StackPanel>
         </Border>
 
@@ -145,6 +145,25 @@
           </StackPanel>
         </Border>
       </UniformGrid>
+
+      <!--
+        各应用时长之和会大于"电脑使用时长" —— 多个应用可同时开启，
+        同一段时间被各自计入。这是并行使用的必然结果，不是统计错误。
+        把两个数字并排说明，避免用户误以为数据算错了。
+      -->
+      <Border Margin="0,12,0,0" Style="{StaticResource Card.Tint}">
+        <StackPanel Orientation="Horizontal">
+          <TextBlock Style="{StaticResource Text.Caption}" Text="各应用时长之和" />
+          <TextBlock
+            Margin="8,0,0,0"
+            Style="{StaticResource Text.BodyStrong}"
+            Text="{Binding AppSumText}" />
+          <TextBlock
+            Margin="12,0,0,0"
+            Style="{StaticResource Text.Caption}"
+            Text="（应用可同时开启，同一时段会重复计入，因此大于电脑使用时长）" />
+        </StackPanel>
+      </Border>
 
       <!--  ══════════ 应用排行 ══════════  -->
       <Border Margin="0,16,0,24" Style="{StaticResource Card}">
