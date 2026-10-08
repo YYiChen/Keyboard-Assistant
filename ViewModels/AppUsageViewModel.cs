@@ -206,6 +206,7 @@ public partial class AppUsageViewModel : ViewModelBase
                         ELSE AccumulatedSeconds
                         END
                     ) AS Seconds,
+                    SUM(COALESCE(BackgroundSeconds, 0)) AS BgSeconds,
                     MIN(StartTime) AS StartTime,
                     MAX(COALESCE(EndTime, datetime('now','localtime'))) AS EndTime
                 FROM ProcessSession
@@ -221,8 +222,9 @@ public partial class AppUsageViewModel : ViewModelBase
                 {
                     var name = reader.GetString(0);
                     var seconds = (long)Math.Round(reader.GetDouble(1));
-                    var startStr = reader.GetString(2);
-                    var endStr = reader.GetString(3);
+                    var bgSeconds = (long)Math.Round(reader.GetDouble(2));
+                    var startStr = reader.GetString(3);
+                    var endStr = reader.GetString(4);
 
                     DateTime? startTime = DateTime.TryParse(startStr, out var st) ? st : null;
                     DateTime? endTime = DateTime.TryParse(endStr, out var et) ? et : null;
@@ -241,6 +243,7 @@ public partial class AppUsageViewModel : ViewModelBase
                             Icon = info.Icon,
                             Initial = info.Initial,
                             TotalSeconds = seconds,
+                            BackgroundSeconds = bgSeconds,
                             StartTime = startTime,
                             EndTime = endTime,
                         }

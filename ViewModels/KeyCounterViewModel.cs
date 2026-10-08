@@ -3,6 +3,7 @@ using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using XAssistant.Models;
+using XAssistant.Services;
 using XAssistant.Services.Interfaces;
 using WpfApplication = System.Windows.Application;
 
@@ -404,6 +405,18 @@ public partial class KeyCounterViewModel : ViewModelBase
     /// <summary>24 小时分布。</summary>
     public ObservableCollection<HourBar> HourlyBars { get; } = new();
 
+    /// <summary>
+    /// 键盘热力图：按真实排布绘制键位，颜色随使用频次加深（v1.3.0 新增）。
+    ///
+    /// 与「高频按键 Top10」互补 —— 排行只能列出前几名，
+    /// 热力图能一眼看出整块键盘的"重心"落在哪里（例如左手区 vs 右手区）。
+    /// </summary>
+    public ObservableCollection<KeyboardKey> KeyboardKeys { get; } = new();
+
+    /// <summary>当前热力图上有按键记录的键位数（用于说明数据完整度）。</summary>
+    [ObservableProperty]
+    private int _heatmapUsedKeyCount;
+
     /// <summary>按键类型分布。</summary>
     public ObservableCollection<KeyCategoryItem> CategoryBreakdown { get; } = new();
 
@@ -484,6 +497,16 @@ public partial class KeyCounterViewModel : ViewModelBase
                 IsCurrent = h == currentHour,
             });
         }
+
+        // ── 键盘热力图 ──
+        // 用同一份 todayDict（已按范围取数）构建，保证与上方指标卡口径一致。
+        var heatmap = KeyboardHeatmap.Build(todayDict);
+
+        KeyboardKeys.Clear();
+        foreach (var key in heatmap)
+            KeyboardKeys.Add(key);
+
+        HeatmapUsedKeyCount = heatmap.Count(k => k.Count > 0);
 
         // ── 按键类型分布 ──
         var byCategory = todayDict

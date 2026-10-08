@@ -218,10 +218,21 @@
                       Style="{StaticResource Text.BodyStrong}"
                       Text="{Binding DisplayName}"
                       TextTrimming="CharacterEllipsis" />
+                    <!--
+                      副标题原本只显示进程名。现在改为「进程名 · 后台 X」——
+                      用来区分"真的在用"和"只是开着"：截图工具这类常驻程序
+                      前台时长接近 0，但后台时长会很大。
+                      后台不足 1 分钟时不显示这一段，避免噪音。
+                    -->
                     <TextBlock
                       Style="{StaticResource Text.Caption}"
-                      Text="{Binding ProcessName}"
-                      TextTrimming="CharacterEllipsis" />
+                      TextTrimming="CharacterEllipsis">
+                      <Run Text="{Binding ProcessName, Mode=OneWay}" />
+                      <Run Text="　" />
+                      <Run
+                        Foreground="{StaticResource Brush.Text.Tertiary}"
+                        Text="{Binding FormattedBackground, StringFormat='后台 {0}'}" />
+                    </TextBlock>
                   </StackPanel>
 
                   <ProgressBar

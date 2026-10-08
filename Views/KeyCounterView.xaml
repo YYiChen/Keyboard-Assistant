@@ -203,6 +203,79 @@
         </StackPanel>
       </Border>
 
+      <!--  ══════════ 键盘热力图 ══════════  -->
+      <!--
+        用真实排布绘制键盘：键位宽度按实物的单位宽还原（Tab 1.5u、Caps 1.75u、
+        Space 6.25u…），颜色随该键的使用次数加深。
+
+        与下方「高频按键」排行互补：排行只能列出前几名，
+        热力图能一眼看出整块键盘的使用重心落在哪个区域。
+      -->
+      <Border Margin="0,16,0,0" Style="{StaticResource Card}">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+              <TextBlock Style="{StaticResource Text.SectionHeader}" Text="键盘热力图" />
+              <TextBlock
+                Margin="0,2,0,0"
+                Style="{StaticResource Text.Caption}"
+                Text="颜色越深表示该键用得越多；悬停可看具体次数。" />
+            </StackPanel>
+            <TextBlock
+              Grid.Column="1"
+              VerticalAlignment="Center"
+              Style="{StaticResource Text.Caption}"
+              Text="{Binding HeatmapUsedKeyCount, StringFormat='{}{0} 个键有记录'}" />
+          </Grid>
+
+          <!--  横向可滚动：主键区约 690px，窄窗口时允许拖动查看  -->
+          <ScrollViewer
+            Margin="0,14,0,0"
+            HorizontalScrollBarVisibility="Auto"
+            VerticalScrollBarVisibility="Disabled">
+            <ItemsControl
+              Width="690"
+              Height="224"
+              ItemsSource="{Binding KeyboardKeys}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <Canvas />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemContainerStyle>
+                <Style TargetType="ContentPresenter">
+                  <Setter Property="Canvas.Left" Value="{Binding PixelX}" />
+                  <Setter Property="Canvas.Top" Value="{Binding PixelY}" />
+                </Style>
+              </ItemsControl.ItemContainerStyle>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Border
+                    Width="{Binding PixelWidth}"
+                    Height="{Binding PixelHeight}"
+                    Background="{Binding Fill}"
+                    CornerRadius="{StaticResource Radius.Small}"
+                    SnapsToDevicePixels="True"
+                    ToolTip="{Binding Tooltip}">
+                    <TextBlock
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      FontFamily="{StaticResource Font.Family}"
+                      FontSize="11"
+                      Foreground="{Binding Foreground}"
+                      Text="{Binding Label}" />
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </StackPanel>
+      </Border>
+
       <!--  ══════════ 类型分布 + 排行（两列） ══════════  -->
       <Grid Margin="0,16,0,0">
         <Grid.ColumnDefinitions>

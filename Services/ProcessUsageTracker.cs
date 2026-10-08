@@ -178,7 +178,18 @@ public sealed class ProcessUsageTracker : IDisposable
 
         // 添加新增列（忽略重复错误）
         foreach (
-            var col in new[] { "AccumulatedSeconds REAL NOT NULL DEFAULT 0", "LastUpdateTime TEXT" }
+            var col in new[]
+            {
+                "AccumulatedSeconds REAL NOT NULL DEFAULT 0",
+                "LastUpdateTime TEXT",
+                // v1.3.0：区分前台使用与后台运行。
+                // AccumulatedSeconds 记的是「该应用在前台被使用」的时间，
+                // 本列记「进程活着但不在前台」的时间 —— 两者相加才是进程存活时长。
+                // 加这一列是为了回答"某个程序是真被用过，还是一直挂在后台"：
+                // 例如截图工具常年驻留，前台时长接近 0、后台时长很大。
+                // 历史记录无法回溯（当时没记），该列默认 0。
+                "BackgroundSeconds REAL NOT NULL DEFAULT 0",
+            }
         )
         {
             try
@@ -657,7 +668,7 @@ public sealed class ProcessUsageTracker : IDisposable
     private void AccumulateRunningSessions()
     {
         var now = DateTime.Now;
-        var updates = new List<(long Id, double Sec, DateTime Time)>();
+        var updates = new List<(long Id, double Sec, double BgSec, DateTime Time)>();
 
         // 只有当前处于前台的进程才算「用户在使用」。
         string? foreground = GetForegroundAppName();
@@ -668,7 +679,7 @@ public sealed class ProcessUsageTracker : IDisposable
             if (state.ProcessCount <= 0)
                 continue;
 
-            // 非前台应用：不累积时长，但**必须**把时间戳写回数据库。
+            // 非前台应用：不计入前台时长，但把这段时间记入「后台时长」。
             //
             // 这里踩过一次坑：起先只改了内存中的 state.LastUpdateTime，
             // 没有加入 updates 列表，于是数据库里的 LastUpdateTime 一直停在旧值。
@@ -678,8 +689,16 @@ public sealed class ProcessUsageTracker : IDisposable
             // 时长持续虚增（实测每十几秒就涨一分钟），用户一眼就看出不对。
             if (!string.Equals(kvp.Key, foreground, StringComparison.OrdinalIgnoreCase))
             {
+                double bgDelta = (now - state.LastUpdateTime).TotalSeconds;
                 state.LastUpdateTime = now;
-                updates.Add((state.SessionId, state.AccumulatedSeconds, now));
+
+                // 小于 0 说明时钟回拨，按 0 处理，避免把时长算成负数
+                if (bgDelta > 0)
+                    state.BackgroundSeconds += bgDelta;
+
+                updates.Add(
+                    (state.SessionId, state.AccumulatedSeconds, state.BackgroundSeconds, now)
+                );
                 continue;
             }
 
@@ -688,7 +707,9 @@ public sealed class ProcessUsageTracker : IDisposable
             {
                 state.AccumulatedSeconds += delta;
                 state.LastUpdateTime = now;
-                updates.Add((state.SessionId, state.AccumulatedSeconds, now));
+                updates.Add(
+                    (state.SessionId, state.AccumulatedSeconds, state.BackgroundSeconds, now)
+                );
             }
         }
 
@@ -706,15 +727,17 @@ public sealed class ProcessUsageTracker : IDisposable
             using var cmd = conn.CreateCommand();
             cmd.Transaction = transaction;
             cmd.CommandText =
-                "UPDATE ProcessSession SET AccumulatedSeconds = @sec, LastUpdateTime = @time WHERE Id = @id";
+                "UPDATE ProcessSession SET AccumulatedSeconds = @sec, BackgroundSeconds = @bg, LastUpdateTime = @time WHERE Id = @id";
             var secParam = cmd.Parameters.Add("@sec", Microsoft.Data.Sqlite.SqliteType.Real);
+            var bgParam = cmd.Parameters.Add("@bg", Microsoft.Data.Sqlite.SqliteType.Real);
             var timeParam = cmd.Parameters.Add("@time", Microsoft.Data.Sqlite.SqliteType.Text);
             var idParam = cmd.Parameters.Add("@id", Microsoft.Data.Sqlite.SqliteType.Integer);
             cmd.Prepare();
 
-            foreach (var (id, sec, time) in updates)
+            foreach (var (id, sec, bg, time) in updates)
             {
                 secParam.Value = sec;
+                bgParam.Value = bg;
                 timeParam.Value = time.ToString("yyyy-MM-dd HH:mm:ss.fff");
                 idParam.Value = id;
                 cmd.ExecuteNonQuery();
@@ -1106,7 +1129,13 @@ public sealed class ProcessUsageTracker : IDisposable
         public int ProcessCount;
         public long SessionId;
         public DateTime StartTime;
+
+        /// <summary>该应用处于前台时被使用的时间。</summary>
         public double AccumulatedSeconds;
+
+        /// <summary>进程存活但不在前台的时间（v1.3.0 新增）。</summary>
+        public double BackgroundSeconds;
+
         public DateTime LastUpdateTime;
     }
 

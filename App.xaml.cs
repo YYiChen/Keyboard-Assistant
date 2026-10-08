@@ -434,44 +434,66 @@ public partial class App : System.Windows.Application
         Shutdown();
     }
 
-    private static Icon GetAppIcon()
+    /// <summary>
+    /// 取得托盘/任务栏使用的应用图标。
+    ///
+    /// 加载顺序（每一步都记日志 —— 上一版把失败静默吞掉，
+    /// 结果只看得到"图标是空白"，无法判断究竟走到哪条回退路径）：
+    ///   1. 从程序集嵌入资源按**系统实际需要的尺寸**构造
+    ///      （系统小图标通常是 16px，直接用 32px 会被系统缩放，且 NotifyIcon
+    ///       对尺寸不匹配的图标处理不一致，可能显示为空白）
+    ///   2. 换用 exe 的 PE 图标资源
+    ///   3. 最后才用系统通用图标（这一步出现就说明前面全失败了）
+    /// </summary>
+    private Icon GetAppIcon()
     {
-        // ── 优先：从嵌入的 WPF 资源加载 ──
-        //
-        // 原先只走 ExtractAssociatedIcon(ProcessPath)，它有两个问题：
-        //   1. 取到的是 exe PE 资源里"第一个"图标，尺寸不可控，托盘里可能偏小偏糊；
-        //   2. 若 PE 图标资源写入异常（构建链、杀软改写等），直接返回 null，
-        //      代码再静默回退到 SystemIcons.Application（一个通用空白图标）。
-        //
-        // 从程序集资源加载则完全可控：图标是构建产物的一部分，
-        // 且能显式指定托盘所需尺寸。
-        try
+        int small = System.Windows.Forms.SystemInformation.SmallIconSize.Width;
+        _appLogger?.LogInformation("准备加载应用图标，系统小图标尺寸={Size}px", small);
+
+        // ── 1. 嵌入资源 ──
+        foreach (int size in new[] { small, 32, 48 })
         {
-            var uri = new Uri("pack://application:,,,/Assets/app-icon.ico");
-            var resource = System.Windows.Application.GetResourceStream(uri);
-            if (resource?.Stream is { } stream)
+            try
             {
+                var uri = new Uri("pack://application:,,,/Assets/app-icon.ico");
+                var resource = System.Windows.Application.GetResourceStream(uri);
+                if (resource?.Stream is not { } stream)
+                {
+                    _appLogger?.LogWarning("图标资源流为空（size={Size}）", size);
+                    continue;
+                }
+
                 using (stream)
-                    return new Icon(stream, new System.Drawing.Size(32, 32));
+                {
+                    var icon = new Icon(stream, new System.Drawing.Size(size, size));
+                    _appLogger?.LogInformation("图标已从嵌入资源加载（请求 {Size}px）", size);
+                    return icon;
+                }
+            }
+            catch (Exception ex)
+            {
+                _appLogger?.LogWarning(ex, "从嵌入资源加载图标失败（size={Size}）", size);
             }
         }
-        catch
-        {
-            // 落到下面的回退路径
-        }
 
-        // ── 回退：从 exe 提取 ──
+        // ── 2. exe 的 PE 图标 ──
         try
         {
             var icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
             if (icon != null)
+            {
+                _appLogger?.LogInformation("图标改为从 exe 提取");
                 return icon;
+            }
+            _appLogger?.LogWarning("ExtractAssociatedIcon 返回 null");
         }
-        catch
+        catch (Exception ex)
         {
-            // 忽略错误，使用默认图标
+            _appLogger?.LogWarning(ex, "从 exe 提取图标失败");
         }
 
+        // ── 3. 兜底 ──
+        _appLogger?.LogError("图标加载全部失败，回退到系统通用图标（界面会显示空白图标）");
         return SystemIcons.Application;
     }
 
