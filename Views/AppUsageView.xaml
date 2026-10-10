@@ -222,7 +222,12 @@
                       副标题原本只显示进程名。现在改为「进程名 · 后台 X」——
                       用来区分"真的在用"和"只是开着"：截图工具这类常驻程序
                       前台时长接近 0，但后台时长会很大。
-                      后台不足 1 分钟时不显示这一段，避免噪音。
+                      后台不足 1 分钟时不显示这一段（FormattedBackground 返回「—」）。
+
+                      ⚠ Mode=OneWay 不可省略：Run.Text 的依赖属性默认是
+                      BindsTwoWayByDefault，而 FormattedBackground 是只读计算属性，
+                      不指定单向会抛 XamlParseException，
+                      且每次渲染都重试 → 日志以每秒数 MB 的速度刷屏（实测 90 秒 110 MB）。
                     -->
                     <TextBlock
                       Style="{StaticResource Text.Caption}"
@@ -231,7 +236,7 @@
                       <Run Text="　" />
                       <Run
                         Foreground="{StaticResource Brush.Text.Tertiary}"
-                        Text="{Binding FormattedBackground, StringFormat='后台 {0}'}" />
+                        Text="{Binding FormattedBackground, Mode=OneWay, StringFormat='后台 {0}'}" />
                     </TextBlock>
                   </StackPanel>
 
