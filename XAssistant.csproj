@@ -17,7 +17,7 @@
       收益仅是"好看"，风险却不小（改漏一处就编译失败）。
       真正对用户可见的是 Product / 窗口标题 / exe 名，这三处已改。
     -->
-    <Version>1.2.0</Version>
+    <Version>1.3.3</Version>
     <AssemblyName>KeyboardAssistant</AssemblyName>
     <Product>Keyboard Assistant</Product>
     <AssemblyTitle>Keyboard Assistant</AssemblyTitle>
