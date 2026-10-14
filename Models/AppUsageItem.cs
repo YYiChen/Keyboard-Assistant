@@ -34,6 +34,23 @@ public class AppUsageItem
     /// <summary>是否有值得展示的后台时间（用于决定界面是否显示这一段）。</summary>
     public bool HasBackground => BackgroundSeconds >= 60;
 
+    /// <summary>
+    /// 后台时间占总存活时间的百分比（0–100）。
+    ///
+    /// 用于把应用分成「前台使用」与「后台常驻」两组：
+    /// 微信这类常驻应用后台占比通常 >80%，正常使用的应用 <30%。
+    /// 历史数据因旧版前台判定缺陷（置顶悬浮窗被误判）可能失真，
+    /// 但随着新版运行，占比会自然趋向真实值。
+    /// </summary>
+    public int BackgroundShare
+    {
+        get
+        {
+            long total = TotalSeconds + BackgroundSeconds;
+            return total > 0 ? (int)(BackgroundSeconds * 100 / total) : 0;
+        }
+    }
+
     public DateTime? StartTime { get; set; }
     public DateTime? EndTime { get; set; }
 

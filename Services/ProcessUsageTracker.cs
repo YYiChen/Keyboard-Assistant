@@ -565,6 +565,19 @@ public sealed class ProcessUsageTracker : IDisposable
     /// </summary>
     /// <summary>
     /// 取当前前台窗口所属应用的名称（已归一化）。
+    /// <summary>
+    /// 取「用户真正在用的应用」名称。
+    ///
+    /// 做了两层过滤 —— 都源于实测发现的问题：
+    ///
+    /// ① 置顶悬浮窗过滤。截图工具（如 Snow Shot）的悬浮条是 WS_EX_TOPMOST 小窗，
+    ///    会一直占据 GetForegroundWindow 的返回值 —— 即使用户正在操作 Edge/SolidWorks，
+    ///    前台也会被记成截图工具（实测一天错记 83 分钟）。对策：前台窗口是置顶窗时，
+    ///    沿 Z 序向下找第一个「非置顶、可见」的窗口，那才是用户真正面对的应用。
+    ///
+    /// ② 空闲过滤。GetLastInputInfo 取系统级最后输入时间，空闲超过阈值说明用户
+    ///    离开了电脑 —— 此时不该给任何应用记前台时长（宁可少记，不要错记）。
+    ///    这也让「应用前台时长」与「电脑使用时长」（键鼠活动并集）口径一致。
     ///
     /// 取不到时返回 null —— 此时**不累计任何应用**。宁可少记，也不要把时间
     /// 错记到某个后台进程头上（那正是"所有应用时长都一样"的由来）。
@@ -573,7 +586,16 @@ public sealed class ProcessUsageTracker : IDisposable
     {
         try
         {
+            // ── 空闲过滤 ──
+            if (GetUserIdleSeconds() >= UserIdleThresholdSeconds)
+                return null;
+
             IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero)
+                return null;
+
+            // ── 置顶悬浮窗过滤 ──
+            hwnd = ResolveRealForegroundWindow(hwnd);
             if (hwnd == IntPtr.Zero)
                 return null;
 
@@ -595,6 +617,86 @@ public sealed class ProcessUsageTracker : IDisposable
             return null;
         }
     }
+
+    /// <summary>用户无键鼠输入多久后，不再把前台应用记为"使用中"。</summary>
+    private const uint UserIdleThresholdSeconds = 90;
+
+    /// <summary>本程序自己的进程 ID —— 在 Z 序查找时排除自身窗口。</summary>
+    private static readonly uint OwnPid = (uint)Environment.ProcessId;
+
+    /// <summary>
+    /// 系统级用户空闲秒数（键盘 + 鼠标）。
+    /// 用 GetLastInputInfo 而非自己订阅钩子：一次调用即可，且覆盖所有输入源。
+    /// </summary>
+    private static uint GetUserIdleSeconds()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        if (!GetLastInputInfo(ref info))
+            return 0; // 取不到就当用户活跃，宁可多记也不漏记正常使用
+
+        // 无符号差值：Environment.TickCount 与 dwTime 同源，差值不受回绕影响
+        return unchecked((uint)Environment.TickCount - info.dwTime) / 1000;
+    }
+
+    /// <summary>
+    /// 前台窗口若是置顶窗（截图悬浮条、录屏工具条等），
+    /// 沿 Z 序向下找第一个「非置顶、可见」的窗口作为真实前台。
+    /// 若找不到（例如桌面上只有置顶小窗），返回 IntPtr.Zero。
+    /// </summary>
+    private IntPtr ResolveRealForegroundWindow(IntPtr hwnd)
+    {
+        if (!IsTopmostWindow(hwnd))
+            return hwnd; // 正常前台，直接用
+
+        // 前台被置顶小窗占据 → 沿 Z 序找真实前台
+        IntPtr cur = hwnd;
+        while ((cur = GetWindow(cur, GW_HWNDNEXT)) != IntPtr.Zero)
+        {
+            if (!IsWindowVisible(cur))
+                continue;
+            if (IsTopmostWindow(cur))
+                continue; // 跳过其他置顶窗（可能有多个悬浮条）
+
+            GetWindowThreadProcessId(cur, out uint pid);
+            if (pid == 0)
+                continue;
+            if (pid == OwnPid)
+                continue; // 排除自身
+            return cur;
+        }
+        return IntPtr.Zero;
+    }
+
+    private bool IsTopmostWindow(IntPtr hwnd)
+    {
+        // 32 位进程用 GetWindowLong；x64 上 GWL_EXSTYLE 值仍在低 32 位内，结果一致
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        return (exStyle & WS_EX_TOPMOST) != 0;
+    }
+
+    // ── P/Invoke ──
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_TOPMOST = 0x00000008;
+    private const uint GW_HWNDNEXT = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetWindow(IntPtr hWnd, uint wCmd);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
 
     private void PollProcesses()
     {

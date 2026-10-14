@@ -27,6 +27,14 @@ public partial class AppUsageViewModel : ViewModelBase
     [ObservableProperty]
     private ObservableCollection<AppUsageItem> _appUsageList = new();
 
+    /// <summary>前台使用的应用（后台占比 &lt; 60%），按前台时长排序。</summary>
+    [ObservableProperty]
+    private ObservableCollection<AppUsageItem> _foregroundApps = new();
+
+    /// <summary>后台常驻的应用（后台占比 ≥ 60%），按后台时长排序。</summary>
+    [ObservableProperty]
+    private ObservableCollection<AppUsageItem> _backgroundApps = new();
+
     /// <summary>
     /// 电脑使用时长（键鼠活动的并集，天然不重叠）。
     ///
@@ -141,6 +149,23 @@ public partial class AppUsageViewModel : ViewModelBase
                 item.Percent = appSumSeconds > 0 ? item.TotalSeconds * 100.0 / appSumSeconds : 0;
 
             AppUsageList = new ObservableCollection<AppUsageItem>(list);
+
+            // ── 分组：前台使用 vs 后台常驻 ──
+            //
+            // 用户的核心诉求是"区分开前台应用和后台应用"——光在每个条目上
+            // 标注"后台 X"不够直观，常驻应用（微信、ChatGPT）会混在排行里。
+            //
+            // 判定用后台占比 ≥60%：微信这类常驻应用通常 >80%，
+            // 正常使用的应用 <30%，60% 是中间的安全分界。
+            // 注意：旧版前台判定有缺陷（置顶悬浮窗被误判为前台），
+            // 历史数据可能失真；新版运行后占比会自然趋向真实值。
+            const int BackgroundResidentShare = 60;
+
+            ForegroundApps = new ObservableCollection<AppUsageItem>(
+                list.Where(x => x.BackgroundShare < BackgroundResidentShare));
+            BackgroundApps = new ObservableCollection<AppUsageItem>(
+                list.Where(x => x.BackgroundShare >= BackgroundResidentShare)
+                    .OrderByDescending(x => x.BackgroundSeconds));
 
             AppCount = list.Count;
             TopAppText = list.Count > 0 ? list[0].DisplayName : "—";
