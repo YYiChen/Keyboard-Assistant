@@ -118,6 +118,55 @@ public partial class AppUsageViewModel : ViewModelBase
     [RelayCommand]
     private void GoToToday() => SelectedDate = DateTime.Today;
 
+    /// <summary>
+    /// 轻量范围统计（供首页「活跃应用」卡使用）。
+    ///
+    /// 与 <see cref="LoadAppUsageAsync"/> 分开：首页只需要「应用数 + 用时最多」
+    /// 两个数字，不需要拉完整列表（那会带着图标提取等重活）。
+    /// 注意：这里只用 AccumulatedSeconds 聚合，不含运行中会话的补偿——
+    /// 对历史天是精确值；"今天"参与的范围误差仅数秒，可接受。
+    /// </summary>
+    public async Task<(int AppCount, string? TopAppDisplay)> GetRangeStatsAsync(StatsRange range)
+    {
+        var (from, to) = range.ToDateRange();
+        return await Task.Run(() =>
+        {
+            try
+            {
+                using var conn = new SqliteConnection($"Data Source={DbPath}");
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText =
+                    """
+                    SELECT COUNT(DISTINCT ProcessName),
+                           (SELECT ProcessName FROM ProcessSession s2
+                            WHERE s2.Date >= $from AND s2.Date < $to
+                            GROUP BY ProcessName
+                            ORDER BY SUM(s2.AccumulatedSeconds) DESC
+                            LIMIT 1)
+                    FROM ProcessSession
+                    WHERE Date >= $from AND Date < $to
+                    """;
+                cmd.Parameters.AddWithValue("$from", from.ToString("yyyy-MM-dd"));
+                cmd.Parameters.AddWithValue("$to", to.ToString("yyyy-MM-dd"));
+                using var reader = cmd.ExecuteReader();
+                if (reader.Read())
+                {
+                    int count = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+                    string? top = reader.IsDBNull(1) ? null : reader.GetString(1);
+                    string? display = top is null ? null : _appInfo.Resolve(top).DisplayName;
+                    return (count, display);
+                }
+                return (0, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "统计范围内应用数据失败");
+                return (0, null);
+            }
+        });
+    }
+
     private static string WeekdayName(DayOfWeek day) =>
         day switch
         {
