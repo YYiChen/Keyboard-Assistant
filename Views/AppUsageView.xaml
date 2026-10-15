@@ -11,6 +11,14 @@
   mc:Ignorable="d">
 
   <UserControl.Resources>
+    <Style x:Key="AppIconBox" TargetType="Border">
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="32" />
+      <Setter Property="CornerRadius" Value="{StaticResource Radius.Medium}" />
+      <Setter Property="Background" Value="{StaticResource Brush.Chart.Track}" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
     <DataTemplate x:Key="AppUsageItemTemplate">
               <Grid Margin="0,0,0,14">
                 <Grid.ColumnDefinitions>
@@ -100,13 +108,7 @@
                   TextAlignment="Right" />
               </Grid>
             </DataTemplate>
-    <Style x:Key="AppIconBox" TargetType="Border">
-      <Setter Property="Width" Value="32" />
-      <Setter Property="Height" Value="32" />
-      <Setter Property="CornerRadius" Value="{StaticResource Radius.Medium}" />
-      <Setter Property="Background" Value="{StaticResource Brush.Chart.Track}" />
-      <Setter Property="SnapsToDevicePixels" Value="True" />
-    </Style>
+
   </UserControl.Resources>
 
   <ScrollViewer
