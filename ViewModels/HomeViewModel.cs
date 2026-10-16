@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using XAssistant.Models;
 using XAssistant.Services;
+using XAssistant.Services.Interfaces;
 
 namespace XAssistant.ViewModels;
 
@@ -31,8 +32,8 @@ public partial class HomeViewModel : ViewModelBase
     private readonly UsageViewModel _usage;
     private readonly AppUsageViewModel _appUsage;
     private readonly ActivityDataService _activityData;
-    private readonly KeyDatabaseService _keyDb;
-    private readonly ClickDatabaseService _clickDb;
+    private readonly IKeyDatabaseService _keyDb;
+    private readonly IClickDatabaseService _clickDb;
     private readonly ILogger<HomeViewModel> _logger;
 
     public HomeViewModel(
@@ -41,8 +42,8 @@ public partial class HomeViewModel : ViewModelBase
         UsageViewModel usage,
         AppUsageViewModel appUsage,
         ActivityDataService activityData,
-        KeyDatabaseService keyDb,
-        ClickDatabaseService clickDb,
+        IKeyDatabaseService keyDb,
+        IClickDatabaseService clickDb,
         ILogger<HomeViewModel> logger
     )
     {
