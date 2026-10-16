@@ -126,7 +126,7 @@ public partial class AppUsageViewModel : ViewModelBase
     /// 注意：这里只用 AccumulatedSeconds 聚合，不含运行中会话的补偿——
     /// 对历史天是精确值；"今天"参与的范围误差仅数秒，可接受。
     /// </summary>
-    public async Task<(int AppCount, string? TopAppDisplay)> GetRangeStatsAsync(StatsRange range)
+    public async Task<(int AppCount, string? TopAppDisplay, List<(string Name, int Minutes)> Top5)> GetRangeStatsAsync(StatsRange range)
     {
         var (from, to) = range.ToDateRange();
         return await Task.Run(() =>
@@ -135,34 +135,48 @@ public partial class AppUsageViewModel : ViewModelBase
             {
                 using var conn = new SqliteConnection($"Data Source={DbPath}");
                 conn.Open();
-                using var cmd = conn.CreateCommand();
-                cmd.CommandText =
-                    """
-                    SELECT COUNT(DISTINCT ProcessName),
-                           (SELECT ProcessName FROM ProcessSession s2
-                            WHERE s2.Date >= $from AND s2.Date < $to
-                            GROUP BY ProcessName
-                            ORDER BY SUM(s2.AccumulatedSeconds) DESC
-                            LIMIT 1)
-                    FROM ProcessSession
-                    WHERE Date >= $from AND Date < $to
-                    """;
-                cmd.Parameters.AddWithValue("$from", from.ToString("yyyy-MM-dd"));
-                cmd.Parameters.AddWithValue("$to", to.ToString("yyyy-MM-dd"));
-                using var reader = cmd.ExecuteReader();
-                if (reader.Read())
+
+                // Top5：范围内按前台累计排序的前五个应用（含显示名转换）
+                var top5 = new List<(string Name, int Minutes)>();
+                using (var cmd = conn.CreateCommand())
                 {
-                    int count = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
-                    string? top = reader.IsDBNull(1) ? null : reader.GetString(1);
-                    string? display = top is null ? null : _appInfo.Resolve(top).DisplayName;
-                    return (count, display);
+                    cmd.CommandText =
+                        """
+                        SELECT ProcessName, SUM(AccumulatedSeconds) AS Total
+                        FROM ProcessSession
+                        WHERE Date >= $from AND Date < $to
+                        GROUP BY ProcessName
+                        ORDER BY Total DESC
+                        LIMIT 5
+                        """;
+                    cmd.Parameters.AddWithValue("$from", from.ToString("yyyy-MM-dd"));
+                    cmd.Parameters.AddWithValue("$to", to.ToString("yyyy-MM-dd"));
+                    using var reader = cmd.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        var name = reader.GetString(0);
+                        var minutes = (int)Math.Round(reader.GetDouble(1) / 60);
+                        top5.Add((_appInfo.Resolve(name).DisplayName, minutes));
+                    }
                 }
-                return (0, null);
+
+                // 应用总数：单独一次 COUNT(DISTINCT)，与 Top5 解耦
+                int appCount = 0;
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText =
+                        "SELECT COUNT(DISTINCT ProcessName) FROM ProcessSession WHERE Date >= $from AND Date < $to";
+                    cmd.Parameters.AddWithValue("$from", from.ToString("yyyy-MM-dd"));
+                    cmd.Parameters.AddWithValue("$to", to.ToString("yyyy-MM-dd"));
+                    appCount = Convert.ToInt32(cmd.ExecuteScalar());
+                }
+
+                return (appCount, top5.Count > 0 ? top5[0].Name : null, top5);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "统计范围内应用数据失败");
-                return (0, null);
+                return (0, null, new List<(string Name, int Minutes)>());
             }
         });
     }

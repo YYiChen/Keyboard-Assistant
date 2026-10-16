@@ -189,6 +189,146 @@
         </StackPanel>
       </Border>
 
+      <!--  ══════════ 自动洞察 ══════════  -->
+      <!--
+        每条结论都必须有数字支撑（环比、峰值、集中度、输入比）。
+        宁可少于 4 条，也不输出没有信息量的套话。
+      -->
+      <Border Margin="0,16,0,0" Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Style="{StaticResource Text.SectionHeader}" Text="数据洞察" />
+          <TextBlock
+            Margin="0,2,0,0"
+            Style="{StaticResource Text.Caption}"
+            Text="根据你的使用数据自动生成的对比与结论。" />
+          <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding Insights}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Margin="0,0,0,8" Orientation="Horizontal">
+                  <Ellipse
+                    Width="6"
+                    Height="6"
+                    Margin="0,0,10,0"
+                    VerticalAlignment="Center"
+                    Fill="{StaticResource Brush.Chart.Primary}" />
+                  <TextBlock
+                    VerticalAlignment="Center"
+                    Style="{StaticResource Text.Body}"
+                    Text="{Binding}"
+                    TextWrapping="Wrap" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!--  ══════════ 今日时段分布 ══════════  -->
+      <Border Margin="0,16,0,0" Style="{StaticResource Card}">
+        <StackPanel>
+          <TextBlock Style="{StaticResource Text.SectionHeader}" Text="今日输入时段" />
+          <TextBlock
+            Margin="0,2,0,0"
+            Style="{StaticResource Text.Caption}"
+            Text="24 小时按键分布，与「键盘记录」页同源。" />
+          <ItemsControl Margin="0,16,0,0" ItemsSource="{Binding HourlyBars}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <UniformGrid Rows="1" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <StackPanel VerticalAlignment="Bottom">
+                  <TextBlock
+                    Margin="0,0,0,6"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource Text.Caption}"
+                    Text="{Binding Count}" />
+                  <Border
+                    Margin="3,0"
+                    HorizontalAlignment="Stretch">
+                    <Border.Style>
+                      <Style BasedOn="{StaticResource Viz.SparkBar}" TargetType="Border">
+                        <Setter Property="Height" Value="{Binding Height}" />
+                        <Setter Property="Width" Value="Auto" />
+                        <Setter Property="Background" Value="{StaticResource Brush.Chart.Muted}" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                            <Setter Property="Background" Value="{StaticResource Brush.Chart.Primary}" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Border.Style>
+                  </Border>
+                  <TextBlock
+                    Margin="0,6,0,0"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource Text.Caption}"
+                    Text="{Binding Label}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!--  ══════════ 应用用时 Top 5 ══════════  -->
+      <Border Margin="0,16,0,0" Style="{StaticResource Card}">
+        <StackPanel>
+          <Grid>
+            <TextBlock Style="{StaticResource Text.SectionHeader}" Text="应用用时 Top 5" />
+            <TextBlock
+              HorizontalAlignment="Right"
+              Style="{StaticResource Text.Caption}"
+              Text="{Binding RangeAppCount, StringFormat='共 {0} 个应用', Mode=OneWay}" />
+          </Grid>
+          <TextBlock
+            Margin="0,2,0,0"
+            Style="{StaticResource Text.Caption}"
+            Text="当前范围内的前台用时排行，条形长度相对第一名。" />
+          <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding TopApps}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid Margin="0,0,0,12">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="150" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock
+                    Grid.Column="0"
+                    Width="18"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource Text.Caption}"
+                    Text="{Binding Rank}" />
+                  <TextBlock
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource Text.Body}"
+                    Text="{Binding Name}"
+                    TextTrimming="CharacterEllipsis" />
+                  <Border
+                    Grid.Column="2"
+                    Margin="10,0"
+                    Height="10"
+                    VerticalAlignment="Center"
+                    Background="{StaticResource Brush.Chart.Primary}"
+                    CornerRadius="{StaticResource Radius.Small}"
+                    Width="{Binding BarWidth, Mode=OneWay}" />
+                  <TextBlock
+                    Grid.Column="3"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource Text.Caption}"
+                    Text="{Binding MinutesText}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
       <!--  ══════════ 记录状态 ══════════  -->
       <Border Margin="0,16,0,24" Style="{StaticResource Card}">
         <StackPanel>
