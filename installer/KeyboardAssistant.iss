@@ -9,7 +9,7 @@
 ; - 卸载不删 %APPDATA%\XAssistant（用户的统计历史），与此前口径一致。
 
 #define AppName "Keyboard Assistant"
-#define AppVersion "1.3.3"
+#define AppVersion "1.3.4"
 #define AppPublisher "YYiChen"
 #define AppExe "KeyboardAssistant.exe"
 
