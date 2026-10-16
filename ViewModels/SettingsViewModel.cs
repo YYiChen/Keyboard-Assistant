@@ -24,7 +24,7 @@ public sealed class DatabaseInfo
 /// 原先没有任何设置界面，所有配置都得手改 appsettings.json ——
 /// 这是"测试品"的另一个特征。本页把散落各处的开关集中起来：
 /// 记录开关（原先键盘页与鼠标页各有一套按钮，且一个用 Visibility、
-/// 一个用 IsEnabled，行为还不一致）、启动行为、速记、数据位置、关于。
+/// 一个用 IsEnabled，行为还不一致）、启动行为、数据位置、关于。
 /// </summary>
 public partial class SettingsViewModel : ViewModelBase
 {
@@ -140,32 +140,6 @@ public partial class SettingsViewModel : ViewModelBase
             OnPropertyChanged();
         }
     }
-
-    // ══════════════ 速记 ══════════════
-
-    public string QuickNoteHotKey => _config.Settings.QuickNote.HotKey;
-
-    /// <summary>
-    /// 速记库连接状态。只显示「已配置/未配置」而不显示连接串本身 ——
-    /// 连接串含数据库密码，不应在界面上明文展示。
-    /// </summary>
-    public string QuickNoteConnectionStatus
-    {
-        get
-        {
-            var qn = _config.Settings.QuickNote;
-            if (!string.IsNullOrWhiteSpace(qn.ConnectionString))
-                return "已配置（直接填写连接串）";
-            if (!string.IsNullOrWhiteSpace(qn.DatabaseUrlEnvPath))
-                return $"已配置（从 .env 读取：{qn.DatabaseUrlEnvPath}）";
-
-            string defaultEnv = Path.Combine(@"C:\xapp-2026-06-30", ".env");
-            return File.Exists(defaultEnv)
-                ? $"已配置（自动读取 {defaultEnv}）"
-                : "未配置 —— 速记将无法保存到数据库";
-        }
-    }
-
     // ══════════════ 数据 ══════════════
 
     public string DataFolderPath => AppDataPathHelper.GetAppDataFolder();

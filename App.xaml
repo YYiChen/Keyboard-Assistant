@@ -25,7 +25,7 @@
         显示 —— WPF 窗口要引用图标必须把 ico 以 <Resource> 打包进程序集，
         再用 pack URI 指定。两者缺一，任务栏就显示系统默认占位图标。
 
-        用隐式样式而非逐个窗口设置：MainWindow / QuickNoteWindow / ToastWindow
+        用隐式样式而非逐个窗口设置：MainWindow / ToastWindow
         都自动获得，后续新增窗口也不会遗漏。
       -->
       <Style TargetType="Window">

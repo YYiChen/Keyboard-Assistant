@@ -125,52 +125,6 @@
           </Grid>
         </StackPanel>
       </Border>
-
-      <!--  ══════════ 速记 ══════════  -->
-      <Border Margin="0,16,0,0" Style="{StaticResource Card}">
-        <StackPanel>
-          <TextBlock Style="{StaticResource Text.SectionHeader}" Text="灵感速记" />
-
-          <Grid Margin="0,14,0,0">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock
-              Grid.Column="0"
-              Width="110"
-              Style="{StaticResource Text.Body}"
-              Text="唤起热键" />
-            <TextBlock
-              Grid.Column="1"
-              Style="{StaticResource Text.Body}"
-              Text="{Binding QuickNoteHotKey}" />
-          </Grid>
-
-          <Grid Margin="0,10,0,0">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="Auto" />
-              <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <TextBlock
-              Grid.Column="0"
-              Width="110"
-              Style="{StaticResource Text.Body}"
-              Text="数据库连接" />
-            <TextBlock
-              Grid.Column="1"
-              Style="{StaticResource Text.Secondary}"
-              Text="{Binding QuickNoteConnectionStatus}"
-              TextWrapping="Wrap" />
-          </Grid>
-
-          <TextBlock
-            Margin="0,10,0,0"
-            Style="{StaticResource Text.Caption}"
-            Text="热键与连接串目前在 appsettings.json 中配置。改为界面编辑需要额外的输入校验与凭据保护，留待后续版本。" />
-        </StackPanel>
-      </Border>
-
       <!--  ══════════ 数据 ══════════  -->
       <Border Margin="0,16,0,0" Style="{StaticResource Card}">
         <StackPanel>

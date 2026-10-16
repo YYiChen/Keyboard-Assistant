@@ -9,7 +9,7 @@ namespace XAssistant.Services.Interfaces;
 public interface IConfigurationService
 {
     /// <summary>
-    /// 当前应用配置（含速记唤起等各段设置）。
+    /// 当前应用配置（录制、启动行为等各段设置）。
     /// </summary>
     AppSettings Settings { get; }
     /// <summary>
